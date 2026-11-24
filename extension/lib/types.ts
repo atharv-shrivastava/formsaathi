@@ -54,5 +54,5 @@ export interface ReviewRow {
   sourceId?: string;
   confidence?: number;
   evidence?: string;
-  status: "unmapped" | "needs-review" | "filled";
+  status: "unmapped" | "needs-review" | "filled" | "conflict";
 }
