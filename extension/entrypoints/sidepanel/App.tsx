@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { checkApi, extractDocument, prepareImage as requestImagePreparation, requestAiMappings } from "../../lib/api";
 import { deleteDocument, listDocuments, saveDocument } from "../../lib/db";
-import { canonicalFieldKey, categoryForKey, createReviewRows, retrieveRelevantDocuments } from "../../lib/mapping";
+import { canonicalFieldKey, categoryForKey, createReviewRows, inferDocumentCategory, retrieveRelevantDocuments } from "../../lib/mapping";
 import type { CandidateFact, DocumentCategory, ReviewRow, ScanResult, StoredDocument } from "../../lib/types";
 import "./styles.css";
 
@@ -58,10 +58,11 @@ export default function App() {
       setStatus("This prototype accepts files up to 10 MB.");
       return;
     }
+    const suggestedCategory = inferDocumentCategory(file.name, category);
     const record: StoredDocument = {
       id: crypto.randomUUID(),
       name: file.name,
-      category,
+      category: suggestedCategory,
       mimeType: file.type,
       size: file.size,
       addedAt: Date.now(),
@@ -69,7 +70,7 @@ export default function App() {
     };
     await saveDocument(record);
     await reloadDocuments();
-    setStatus(file.name + " was added to your local document vault. OCR has not run yet.");
+    setStatus(file.name + " was added as " + suggestedCategory + ". Check or change its category if the filename was unclear. OCR has not run yet.");
   }
 
   async function handleDelete(id: string) {
