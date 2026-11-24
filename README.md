@@ -31,20 +31,44 @@ FormSaathi helps a citizen organize documents, inspect a web form, retrieve only
 ## Prerequisites
 
 - Node.js 22.12+ or a current 24.x LTS release.
-- npm.
+- pnpm 12.22.0 (pinned in package.json).
 - Google Chrome or Chromium.
 - Optional: Gemini API key for the opt-in mapping experiment.
 
+## Install pnpm
+
+On Windows, install the pinned version with npm:
+
+    npm install --global pnpm@12.22.0
+
+Alternatively, use the official pnpm installer. The project pins its expected version in package.json.
+
 ## Run locally
 
-1. Install dependencies from the repository root: npm install
+From the repository root:
+
+1. Install workspace dependencies and generate pnpm-lock.yaml:
+
+       pnpm install
+
 2. Create the local API environment file:
-   - macOS/Linux: cp server/.env.example server/.env
    - Windows PowerShell: Copy-Item server/.env.example server/.env
-3. Start the local OCR service in one terminal: npm run dev:server
-4. Start the extension dev build in another terminal: npm run dev:extension
+   - macOS/Linux: cp server/.env.example server/.env
+
+3. Start the local OCR service in one terminal:
+
+       pnpm dev:server
+
+4. Start the extension dev build in another terminal:
+
+       pnpm dev:extension
+
 5. Open chrome://extensions, enable Developer mode, and load extension/.output/chrome-mv3-dev.
-6. Start the mock form from the repository root: py -m http.server 4173 --directory demo
+
+6. Start the mock form from the repository root:
+
+       py -m http.server 4173 --directory demo
+
 7. Open http://127.0.0.1:4173/scholarship-form.html. Add synthetic documents to the extension, then scan the mock form.
 
 The first OCR run may download Tesseract language data. Keep the local service running while testing the extension.
@@ -79,9 +103,13 @@ The extension uses broad HTTP/HTTPS page matching for this prototype, but does n
 
 ## Checks
 
-- npm run check:server validates local service JavaScript syntax.
-- npm test runs candidate-extraction tests.
-- npm run build:extension builds the Chrome extension.
+- pnpm check:server validates local service JavaScript syntax.
+- pnpm test runs candidate-extraction tests.
+- pnpm build:extension builds the Chrome extension.
 - GitHub Actions runs these checks on pushes and pull requests to main.
+
+## Lockfile note
+
+The initial pnpm migration does not yet include a generated pnpm-lock.yaml. Run pnpm install once and commit the generated lockfile. Then update GitHub Actions to use pnpm install --frozen-lockfile for reproducible CI installs.
 
 See docs/ARCHITECTURE.md, docs/PRIVACY.md and docs/DEVELOPMENT.md.
