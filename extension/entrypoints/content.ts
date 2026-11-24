@@ -178,7 +178,7 @@ function fillField(fieldId: string, value: string): { ok: boolean; message: stri
 }
 
 export default defineContentScript({
-  matches: ["http://*/*", "https://*/*"],
+  matches: ["http://*/*", "https://*/*", "file:///*"],
   runAt: "document_idle",
   main() {
     chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
