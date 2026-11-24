@@ -1,8 +1,8 @@
 const patterns = [
   {
     key: "applicant_name",
-    confidence: 0.58,
-    expression: /^(?:applicant|candidate|student|full)\s*name\s*[:\-]\s*(.{2,90})$/i
+    confidence: 0.52,
+    expression: /^(?:(?:applicant|candidate|student|full)\s*name|name\s+of\s+(?:applicant|candidate|student)|name)\s*[:\-]\s*(.{2,90})$/i
   },
   {
     key: "father_name",
