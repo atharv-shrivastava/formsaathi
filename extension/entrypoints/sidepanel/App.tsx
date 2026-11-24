@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { checkApi, extractDocument, requestAiMappings } from "../../lib/api";
+import { checkApi, extractDocument, prepareImage as requestImagePreparation, requestAiMappings } from "../../lib/api";
 import { deleteDocument, listDocuments, saveDocument } from "../../lib/db";
 import { canonicalFieldKey, categoryForKey, createReviewRows, retrieveRelevantDocuments } from "../../lib/mapping";
 import type { CandidateFact, DocumentCategory, ReviewRow, ScanResult, StoredDocument } from "../../lib/types";
@@ -27,6 +27,10 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("Add documents, then scan the form you are working on.");
   const [tab, setTab] = useState<"documents" | "form">("documents");
+  const [maxKb, setMaxKb] = useState(50);
+  const [maxWidth, setMaxWidth] = useState(300);
+  const [maxHeight, setMaxHeight] = useState(300);
+  const [preparingId, setPreparingId] = useState<string | null>(null);
 
   const reloadDocuments = async () => setDocuments(await listDocuments());
 
@@ -72,6 +76,39 @@ export default function App() {
     await deleteDocument(id);
     await reloadDocuments();
     setStatus("Document removed from this browser's local vault.");
+  }
+
+  async function changeDocumentCategory(document: StoredDocument, nextCategory: DocumentCategory) {
+    await saveDocument({ ...document, category: nextCategory });
+    await reloadDocuments();
+    setStatus("Document category updated. Future form scans will use the new category.");
+  }
+
+  async function prepareDocumentImage(document: StoredDocument) {
+    if (!document.mimeType.startsWith("image/")) {
+      setStatus("Image preparation currently supports image files only. PDF conversion is not included yet.");
+      return;
+    }
+    if (!apiReady) {
+      setStatus("Start the local service before preparing images: npm run dev:server.");
+      return;
+    }
+    setPreparingId(document.id);
+    setStatus("Preparing a JPEG copy. Your original vault document will remain unchanged.");
+    try {
+      const result = await requestImagePreparation(document, maxKb, maxWidth, maxHeight);
+      const url = URL.createObjectURL(result.blob);
+      const anchor = window.document.createElement("a");
+      anchor.href = url;
+      anchor.download = document.name.replace(/\.[^.]+$/, "") + "-prepared.jpg";
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+      setStatus("Prepared JPEG: " + result.width + " × " + result.height + ", " + (result.bytes / 1024).toFixed(1) + " KB. Attach the downloaded copy manually on the portal.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not prepare this image.");
+    } finally {
+      setPreparingId(null);
+    }
   }
 
   async function getActiveTabId(): Promise<number> {
@@ -245,6 +282,15 @@ export default function App() {
             <input type="file" accept="application/pdf,image/*" onChange={handleUpload} />
             <span>＋ Add PDF or image</span>
           </label>
+          <div className="prepare-settings">
+            <div className="prepare-heading">Portal upload requirements</div>
+            <div className="prepare-grid">
+              <label>Maximum size (KB)<input type="number" min="5" max="5000" value={maxKb} onChange={(event) => setMaxKb(Math.min(5000, Math.max(5, Number(event.target.value) || 5)))} /></label>
+              <label>Max width (px)<input type="number" min="32" max="4000" value={maxWidth} onChange={(event) => setMaxWidth(Math.min(4000, Math.max(32, Number(event.target.value) || 32)))} /></label>
+              <label>Max height (px)<input type="number" min="32" max="4000" value={maxHeight} onChange={(event) => setMaxHeight(Math.min(4000, Math.max(32, Number(event.target.value) || 32)))} /></label>
+            </div>
+            <p>Prepare JPEG copies of photos or signatures. The original stays in your vault; attach the downloaded copy yourself.</p>
+          </div>
           <div className="category-summary">
             {groupedCount.map((item) => (
               <div key={item.value}><span>{item.label}</span><b>{item.count}</b></div>
@@ -257,8 +303,20 @@ export default function App() {
                 <div className="file-icon">{document.mimeType === "application/pdf" ? "PDF" : "IMG"}</div>
                 <div className="document-main">
                   <strong title={document.name}>{document.name}</strong>
-                  <span>{categories.find((item) => item.value === document.category)?.label} · {(document.size / 1024).toFixed(0)} KB</span>
+                  <select
+                    className="document-category"
+                    value={document.category}
+                    aria-label={"Category for " + document.name}
+                    onChange={(event) => void changeDocumentCategory(document, event.target.value as DocumentCategory)}
+                  >
+                    {categories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  </select>
                   <small>{document.cachedAt ? "OCR cached locally" : "Not processed"}</small>
+                  {document.mimeType.startsWith("image/") && (
+                    <button className="text-button prepare-button" disabled={!apiReady || preparingId === document.id} onClick={() => void prepareDocumentImage(document)}>
+                      {preparingId === document.id ? "Preparing…" : "Prepare JPEG copy"}
+                    </button>
+                  )}
                 </div>
                 <button className="icon-button" title="Delete document" onClick={() => void handleDelete(document.id)}>×</button>
               </article>
