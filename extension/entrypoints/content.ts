@@ -151,7 +151,7 @@ function fillField(fieldId: string, value: string): { ok: boolean; message: stri
   const element = document.querySelector<HTMLElement>("[" + KEY_ATTRIBUTE + "=\"" + CSS.escape(fieldId) + "\"]");
   if (!element || !isVisible(element)) return { ok: false, message: "The field is no longer available. Scan the page again." };
   if (element instanceof HTMLInputElement) {
-    if (["file", "password", "hidden", "submit", "button"].includes(element.type) || element.disabled || element.readOnly) {
+    if (["file", "password", "hidden", "submit", "button", "reset", "checkbox", "radio", "image"].includes(element.type) || element.disabled || element.readOnly) {
       return { ok: false, message: "This field type cannot be safely autofilled." };
     }
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
