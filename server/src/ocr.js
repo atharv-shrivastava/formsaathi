@@ -24,6 +24,28 @@ async function recognizeImage(buffer) {
   return result.data.text || "";
 }
 
+function getPdfTextLines(items) {
+  const lines = [];
+  let currentLine = "";
+  let previousY = null;
+
+  for (const item of items) {
+    if (!("str" in item) || !item.str.trim()) continue;
+    const text = item.str.trim();
+    const y = Array.isArray(item.transform) ? item.transform[5] : null;
+    if (currentLine && y !== null && previousY !== null && Math.abs(y - previousY) > 3) {
+      lines.push(currentLine.trim());
+      currentLine = text;
+    } else {
+      currentLine += (currentLine ? " " : "") + text;
+    }
+    if (y !== null) previousY = y;
+  }
+
+  if (currentLine.trim()) lines.push(currentLine.trim());
+  return lines.join("\\n");
+}
+
 async function recognizePdf(buffer) {
   const pdf = await getDocument({
     data: new Uint8Array(buffer),
@@ -37,27 +59,27 @@ async function recognizePdf(buffer) {
   }
 
   const pages = [];
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-    const page = await pdf.getPage(pageNumber);
-    const textContent = await page.getTextContent();
-    const embeddedText = textContent.items
-      .map((item) => ("str" in item ? item.str : ""))
-      .join(" ")
-      .trim();
+  try {
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const textContent = await page.getTextContent();
+      const embeddedText = getPdfTextLines(textContent.items);
 
-    if (embeddedText.length > 40) {
-      pages.push(embeddedText);
-      continue;
+      if (embeddedText.replace(/\\s/g, "").length > 40) {
+        pages.push(embeddedText);
+        continue;
+      }
+
+      const viewport = page.getViewport({ scale: 1.8 });
+      const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+      const context = canvas.getContext("2d");
+      await page.render({ canvasContext: context, viewport }).promise;
+      pages.push(await recognizeImage(canvas.toBuffer("image/png")));
     }
-
-    const viewport = page.getViewport({ scale: 1.8 });
-    const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
-    const context = canvas.getContext("2d");
-    await page.render({ canvasContext: context, viewport }).promise;
-    pages.push(await recognizeImage(canvas.toBuffer("image/png")));
+  } finally {
+    await pdf.destroy();
   }
-  await pdf.destroy();
-  return pages.join("\n\n");
+  return pages.join("\\n\\n");
 }
 
 export async function processDocument(file) {
