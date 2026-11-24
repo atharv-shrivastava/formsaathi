@@ -59,10 +59,26 @@ export function createReviewRows(
     if (!key || field.isFile) {
       return { field, canonicalKey: key, value: "", status: "unmapped" };
     }
-    const candidate = facts
-      .filter((fact) => fact.key === key)
-      .sort((a, b) => b.confidence - a.confidence)[0];
-    if (!candidate) return { field, canonicalKey: key, value: "", status: "unmapped" };
+    const candidates = facts.filter((fact) => fact.key === key);
+    if (!candidates.length) return { field, canonicalKey: key, value: "", status: "unmapped" };
+
+    const distinctValues = Array.from(new Set(candidates.map((fact) => fact.value.trim())));
+    if (distinctValues.length > 1) {
+      const evidence = candidates
+        .map((fact) => fact.sourceName + ": " + fact.value)
+        .join(" | ");
+      return {
+        field,
+        canonicalKey: key,
+        value: "",
+        sourceName: "Conflicting documents",
+        confidence: 0,
+        evidence: "Conflict: " + evidence,
+        status: "conflict"
+      };
+    }
+
+    const candidate = candidates.sort((a, b) => b.confidence - a.confidence)[0];
     return {
       field,
       canonicalKey: key,
