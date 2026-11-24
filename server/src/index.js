@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import multer from "multer";
 import { processDocument } from "./ocr.js";
+import { prepareImage } from "./prepare.js";
 
 const app = express();
 const port = Number(process.env.PORT || 8787);
@@ -13,11 +14,16 @@ const upload = multer({
 
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || origin.startsWith("chrome-extension://") || origin.startsWith("http://localhost") || origin.startsWith("http://127.0.0.1")) {
-      callback(null, true);
-      return;
+    if (!origin) return callback(null, true);
+    try {
+      const parsed = new URL(origin);
+      const isLoopback = parsed.protocol === "http:" &&
+        ["localhost", "127.0.0.1"].includes(parsed.hostname);
+      const isExtension = parsed.protocol === "chrome-extension:";
+      callback(null, isLoopback || isExtension);
+    } catch {
+      callback(new Error("Origin is not allowed by the local FormSaathi service."));
     }
-    callback(new Error("Origin is not allowed by the local FormSaathi service."));
   }
 }));
 app.use(express.json({ limit: "1mb" }));
@@ -37,6 +43,26 @@ app.post("/api/ocr", upload.single("file"), async (request, response) => {
     });
   } catch (error) {
     response.status(422).json({ error: error instanceof Error ? error.message : "OCR processing failed." });
+  }
+});
+
+app.post("/api/prepare-image", upload.single("file"), async (request, response) => {
+  try {
+    if (!request.file) return response.status(400).json({ error: "Choose an image file." });
+    const result = await prepareImage(request.file, {
+      maxKb: request.body?.maxKb,
+      width: request.body?.width,
+      height: request.body?.height
+    });
+    const baseName = String(request.file.originalname || "document").replace(/[^a-zA-Z0-9._-]/g, "_");
+    response.setHeader("Content-Type", "image/jpeg");
+    response.setHeader("Content-Disposition", 'attachment; filename="' + baseName.replace(/\.[^.]+$/, "") + '-prepared.jpg"');
+    response.setHeader("X-Output-Width", String(result.width));
+    response.setHeader("X-Output-Height", String(result.height));
+    response.setHeader("X-Output-Bytes", String(result.bytes));
+    response.send(result.buffer);
+  } catch (error) {
+    response.status(422).json({ error: error instanceof Error ? error.message : "Image preparation failed." });
   }
 });
 
