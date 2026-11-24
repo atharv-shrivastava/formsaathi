@@ -34,6 +34,7 @@ Each field descriptor includes a transient ID, visible label, tag name, input ty
 ## Safety boundaries
 
 - The AI endpoint returns suggestions only. It cannot invoke browser actions.
+- If multiple selected documents provide different values for the same canonical field, the UI flags a conflict instead of choosing the highest OCR score. Optional AI mapping is prevented from resolving that conflict; the applicant must decide.
 - File inputs are detected but cannot be autofilled by the extension.
 - No CAPTCHA solving, anti-bot bypass, credential handling or final submission automation.
 - If a target is missing or ambiguous, the user must rescan or fill manually.
