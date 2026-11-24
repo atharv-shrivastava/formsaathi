@@ -12,15 +12,28 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.22.0
+
       - name: Install dependencies
-        run: npm install
+        # The first pnpm migration has no committed lockfile yet.
+        # After generating and committing pnpm-lock.yaml locally, switch to --frozen-lockfile.
+        run: pnpm install --no-frozen-lockfile
+
       - name: Check local service syntax
-        run: npm run check:server
+        run: pnpm check:server
+
       - name: Run extraction tests
-        run: npm test
+        run: pnpm test
+
       - name: Build Chrome extension
-        run: npm run build:extension
+        run: pnpm build:extension
