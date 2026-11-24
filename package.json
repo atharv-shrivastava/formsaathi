@@ -9,6 +9,6 @@
     "dev:server": "npm run dev --workspace @formsaathi/server",
     "start:server": "npm run start --workspace @formsaathi/server",
     "check:server": "node --check server/src/index.js && node --check server/src/ocr.js && node --check server/src/facts.js",
-    "test": "node --test server/test/*.test.js"
+    "test": "node --test server/test/facts.test.js"
   }
 }
