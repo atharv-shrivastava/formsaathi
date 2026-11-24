@@ -75,3 +75,16 @@ export function createReviewRows(
     };
   });
 }
+
+
+export function inferDocumentCategory(filename: string, fallback: DocumentCategory): DocumentCategory {
+  const name = filename.toLowerCase().replace(/[_-]+/g, " ");
+  if (/(aadhaar|aadhar|pan card|passport|voter id|identity)/.test(name)) return "identity";
+  if (/(address proof|electricity bill|utility bill|residence|domicile)/.test(name)) return "address";
+  if (/(income certificate|income proof|salary slip|salary certificate|itr)/.test(name)) return "income";
+  if (/(marksheet|mark sheet|class 10|class 12|10th|12th|academic|school certificate)/.test(name)) return "education";
+  if (/(passbook|bank statement|cancelled cheque|cancel cheque|bank account)/.test(name)) return "bank";
+  if (/(signature|sign image)/.test(name)) return "signature";
+  if (/(passport size|photograph|profile photo)/.test(name)) return "photo";
+  return fallback;
+}
