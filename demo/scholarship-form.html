@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sample Scholarship Application | FormSaathi Demo</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f1f4f8;color:#1d2939;font:15px/1.5 system-ui,sans-serif}
+    header{background:#173c73;color:white;padding:22px max(20px,calc((100vw - 900px)/2))}
+    main{max-width:900px;margin:28px auto;padding:0 18px}.card{background:white;border:1px solid #dce3ed;border-radius:14px;padding:24px;margin-bottom:18px}
+    h1{font-size:22px;margin:0}h2{font-size:17px;margin:0 0 18px}p{color:#667085}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    label{display:block;font-weight:650;font-size:13px;margin-bottom:6px}input,select,textarea{width:100%;padding:11px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;background:white}
+    .full{grid-column:1/-1}.hint{font-size:12px;color:#667085}.actions{display:flex;justify-content:flex-end;gap:10px}
+    button{padding:11px 18px;border:0;border-radius:8px;background:#1e5aa0;color:white;font-weight:700}
+    @media(max-width:650px){.grid{grid-template-columns:1fr}.full{grid-column:auto}}
+  </style>
+</head>
+<body>
+  <header><div><strong>DEMO PORTAL</strong><h1>Student Scholarship Application</h1></div></header>
+  <main>
+    <p>This mock page uses fictional information only. It is provided to test FormSaathi field detection, highlighting and user-approved autofill.</p>
+    <form id="scholarship-form">
+      <section class="card">
+        <h2>Applicant information</h2>
+        <div class="grid">
+          <div><label for="applicant_name">Applicant Name</label><input id="applicant_name" name="applicant_name" required></div>
+          <div><label for="dob">Date of Birth (DD/MM/YYYY)</label><input id="dob" name="dob" placeholder="DD/MM/YYYY" required></div>
+          <div><label for="father_name">Father's Name</label><input id="father_name" name="father_name"></div>
+          <div><label for="annual_income">Annual Family Income (INR)</label><input id="annual_income" name="annual_income" inputmode="numeric"></div>
+        </div>
+      </section>
+      <section class="card">
+        <h2>Education details</h2>
+        <div class="grid">
+          <div><label for="percentage">Class 12 Percentage</label><input id="percentage" name="percentage" type="number" min="0" max="100" step="0.01"></div>
+          <div><label for="board">Board</label><select id="board" name="board"><option value="">Select board</option><option>MP Board</option><option>CBSE</option><option>ICSE</option></select></div>
+          <div class="full"><label for="marksheet">Upload Class 12 Marksheet</label><input id="marksheet" name="marksheet" type="file" accept="application/pdf,image/*"><span class="hint">FormSaathi identifies this as a manual upload step.</span></div>
+        </div>
+      </section>
+      <section class="card">
+        <h2>Bank details</h2>
+        <div class="grid">
+          <div><label for="account_number">Bank Account Number</label><input id="account_number" name="account_number" inputmode="numeric"></div>
+          <div><label for="ifsc">IFSC Code</label><input id="ifsc" name="ifsc"></div>
+        </div>
+      </section>
+      <div class="actions"><button type="submit">Demo submit (disabled)</button></div>
+    </form>
+  </main>
+  <script>
+    document.getElementById("scholarship-form").addEventListener("submit", function(event) {
+      event.preventDefault();
+      alert("Demo only. FormSaathi does not submit applications.");
+    });
+  </script>
+</body>
+</html>
