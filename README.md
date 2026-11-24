@@ -15,6 +15,7 @@ FormSaathi helps a citizen organize documents, inspect a web form, retrieve only
 - Conservative, evidence-linked extraction for a small set of labelled fields.
 - Semantic field aliases and optional, consent-gated Gemini mapping.
 - Shadow-DOM overlay with a field outline, tooltip and pointer line.
+- Cross-document conflicts are surfaced for human resolution instead of silently selecting one value.
 - Per-field review and approval before autofill.
 - Image preparation: resize and compress a JPEG copy to portal-specified maximum dimensions and size.
 - Synthetic scholarship form and a small extraction test.
