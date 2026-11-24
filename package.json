@@ -1,0 +1,12 @@
+{
+  "name": "formsaathi",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["extension", "server"],
+  "scripts": {
+    "dev:extension": "npm run dev --workspace @formsaathi/extension",
+    "build:extension": "npm run build --workspace @formsaathi/extension",
+    "dev:server": "npm run dev --workspace @formsaathi/server",
+    "start:server": "npm run start --workspace @formsaathi/server"
+  }
+}
