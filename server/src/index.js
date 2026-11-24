@@ -12,18 +12,30 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024, files: 1 }
 });
 
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  try {
+    const parsed = new URL(origin);
+    return parsed.protocol === "chrome-extension:" ||
+      (parsed.protocol === "http:" && ["localhost", "127.0.0.1"].includes(parsed.hostname));
+  } catch {
+    return false;
+  }
+}
+
+// Reject foreign browser origins as well as omitting CORS headers. CORS alone does
+// not stop a hostile page from sending every kind of simple cross-origin request.
+app.use((request, response, next) => {
+  const origin = request.headers.origin;
+  if (!isAllowedOrigin(origin)) {
+    return response.status(403).json({ error: "Origin is not allowed by the local FormSaathi service." });
+  }
+  next();
+});
+
 app.use(cors({
   origin(origin, callback) {
-    if (!origin) return callback(null, true);
-    try {
-      const parsed = new URL(origin);
-      const isLoopback = parsed.protocol === "http:" &&
-        ["localhost", "127.0.0.1"].includes(parsed.hostname);
-      const isExtension = parsed.protocol === "chrome-extension:";
-      callback(null, isLoopback || isExtension);
-    } catch {
-      callback(new Error("Origin is not allowed by the local FormSaathi service."));
-    }
+    callback(null, isAllowedOrigin(origin));
   }
 }));
 app.use(express.json({ limit: "1mb" }));
