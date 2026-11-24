@@ -171,18 +171,34 @@ export default function App() {
   }
 
   async function tryAiMapping() {
-    if (!window.confirm("This sends only already-extracted candidate facts and detected field labels to the configured Gemini API. Original documents are not sent. Continue?")) return;
+    if (!window.confirm("This sends only already-extracted candidate facts and detected field labels from relevant document categories to the configured Gemini API. Original documents are not sent. Continue?")) return;
     setBusy(true);
     setStatus("Requesting optional AI mapping…");
     try {
-      const facts = documents.flatMap((document) =>
-        (document.cachedFacts || []).map((fact) => ({ ...fact, sourceName: document.name }))
-      );
+      const relevantDocuments = retrieveRelevantDocuments(scan.fields, documents);
+      const relevantIds = new Set(relevantDocuments.map((document) => document.id));
+      const facts = documents
+        .filter((document) => relevantIds.has(document.id))
+        .flatMap((document) => (document.cachedFacts || []).map((fact) => ({
+          ...fact,
+          sourceId: document.id,
+          sourceName: document.name
+        })));
+      if (!facts.length) throw new Error("No extracted facts from relevant documents are available to map.");
       const response = await requestAiMappings(scan.fields, facts);
       setRows((current) => current.map((row) => {
         const suggestion = response.mappings.find((mapping) => mapping.fieldId === row.field.id);
         if (!suggestion || row.value) return row;
-        return { ...row, value: suggestion.value, canonicalKey: suggestion.factKey, confidence: suggestion.confidence, status: "needs-review" };
+        const source = facts.find((fact) => fact.key === suggestion.factKey && fact.value === suggestion.value);
+        return {
+          ...row,
+          value: suggestion.value,
+          canonicalKey: suggestion.factKey,
+          sourceName: source?.sourceName,
+          sourceId: source?.sourceId,
+          confidence: suggestion.confidence,
+          status: "needs-review"
+        };
       }));
       setStatus("AI suggestions received. They are unverified; check every value before filling.");
     } catch (error) {
