@@ -204,7 +204,7 @@ export default function App() {
 
   function editValue(index: number, value: string) {
     setRows((current) => current.map((row, itemIndex) =>
-      itemIndex === index ? { ...row, value, status: row.status === "filled" ? "needs-review" : row.status } : row
+      itemIndex === index ? { ...row, value, status: row.status === "filled" || row.status === "conflict" ? "needs-review" : row.status } : row
     ));
   }
 
@@ -226,7 +226,7 @@ export default function App() {
       const response = await requestAiMappings(scan.fields, facts);
       setRows((current) => current.map((row) => {
         const suggestion = response.mappings.find((mapping) => mapping.fieldId === row.field.id);
-        if (!suggestion || row.value) return row;
+        if (!suggestion || row.value || row.status === "conflict") return row;
         const source = facts.find((fact) => fact.key === suggestion.factKey && fact.value === suggestion.value);
         return {
           ...row,
@@ -346,7 +346,7 @@ export default function App() {
                   <article className="mapping-card" key={row.field.id}>
                     <div className="mapping-top">
                       <div><strong>{row.field.label}</strong><span>{row.field.inputType}{row.field.required ? " · required" : ""}</span></div>
-                      <span className={"status-tag " + row.status}>{row.status === "filled" ? "Filled" : row.value ? "Review" : "No match"}</span>
+                      <span className={"status-tag " + row.status}>{row.status === "conflict" ? "Conflict" : row.status === "filled" ? "Filled" : row.value ? "Review" : "No match"}</span>
                     </div>
                     <button className="text-button" onClick={() => void highlight(row)}>Highlight on page ↗</button>
                     {row.field.isFile ? (
@@ -358,7 +358,7 @@ export default function App() {
                           {row.sourceName ? <span>Source: {row.sourceName}</span> : <span>No matched document</span>}
                           {typeof row.confidence === "number" && <span>Signal: {Math.round(row.confidence * 100)}%</span>}
                         </div>
-                        {row.evidence && <p className="evidence-quote">OCR evidence: {row.evidence}</p>}
+                        {row.evidence && <p className={"evidence-quote " + (row.status === "conflict" ? "conflict-evidence" : "")}>{row.status === "conflict" ? "Conflicting values: " : "OCR evidence: "}{row.evidence.replace(/^Conflict: /, "")}</p>}
                         <button className="approve-button" disabled={!row.value.trim() || row.status === "filled"} onClick={() => void approveFill(index)}>
                           {row.status === "filled" ? "Filled · verify on page" : "Approve & fill this field"}
                         </button>
