@@ -1,20 +1,33 @@
 import type { CandidateFact, DocumentCategory, PortalField, ReviewRow, StoredDocument } from "./types";
 
 const aliases: Record<string, string[]> = {
-  applicant_name: ["applicant name", "name of applicant", "candidate name", "student name", "full name", "name"],
-  father_name: ["father name", "father's name", "guardian name", "parent name"],
+  applicant_name: ["applicant name", "applicants name", "name of applicant", "candidate name", "student name", "full name", "name"],
+  father_name: ["father name", "fathers name", "name of father", "guardian name", "name of guardian", "parent name"],
   date_of_birth: ["date of birth", "dob", "birth date"],
   annual_income: ["annual family income", "family income", "annual income", "income"],
   percentage: ["class 12 percentage", "12th percentage", "aggregate percentage", "marks percentage", "percentage"],
-  bank_account_number: ["bank account number", "account number", "a/c number"],
+  bank_account_number: ["bank account number", "account number", "a c number"],
   ifsc_code: ["ifsc code", "ifsc"]
 };
 
+const orderedAliases = Object.entries(aliases)
+  .flatMap(([key, names]) => names.map((name) => ({ key, name })))
+  .sort((a, b) => b.name.length - a.name.length);
+
 export function canonicalFieldKey(field: PortalField): string | null {
   const haystack = [field.label, field.name, field.placeholder].filter(Boolean).join(" ").toLowerCase();
-  const normalized = haystack.replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
-  for (const [key, names] of Object.entries(aliases)) {
-    if (names.some((name) => normalized === name || normalized.includes(name))) return key;
+  const normalized = haystack
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  for (const alias of orderedAliases) {
+    if (alias.name === "name") {
+      if (normalized === "name") return alias.key;
+    } else if (normalized === alias.name || normalized.includes(alias.name)) {
+      return alias.key;
+    }
   }
   return null;
 }
