@@ -17,16 +17,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: pnpm
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 12.22.0
 
       - name: Install dependencies
-        # The first pnpm migration has no committed lockfile yet.
-        # After generating and committing pnpm-lock.yaml locally, switch to --frozen-lockfile.
+        # Generate the lockfile during this initial migration. Once pnpm-lock.yaml
+        # is committed, change this to: pnpm install --frozen-lockfile
         run: pnpm install --no-frozen-lockfile
 
       - name: Check local service syntax
