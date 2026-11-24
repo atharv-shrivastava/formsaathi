@@ -43,7 +43,7 @@ function getPdfTextLines(items) {
   }
 
   if (currentLine.trim()) lines.push(currentLine.trim());
-  return lines.join("\\n");
+  return lines.join("\n");
 }
 
 async function recognizePdf(buffer) {
@@ -65,7 +65,7 @@ async function recognizePdf(buffer) {
       const textContent = await page.getTextContent();
       const embeddedText = getPdfTextLines(textContent.items);
 
-      if (embeddedText.replace(/\\s/g, "").length > 40) {
+      if (embeddedText.replace(/\s/g, "").length > 40) {
         pages.push(embeddedText);
         continue;
       }
@@ -79,7 +79,7 @@ async function recognizePdf(buffer) {
   } finally {
     await pdf.destroy();
   }
-  return pages.join("\\n\\n");
+  return pages.join("\n\n");
 }
 
 export async function processDocument(file) {
