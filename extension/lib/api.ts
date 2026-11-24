@@ -26,6 +26,33 @@ export async function extractDocument(document: StoredDocument): Promise<{
   return { text: result.text, facts: result.facts || [] };
 }
 
+
+export async function prepareImage(
+  document: StoredDocument,
+  maxKb: number,
+  width: number,
+  height: number
+): Promise<{ blob: Blob; bytes: number; width: number; height: number }> {
+  const form = new FormData();
+  form.append("file", document.file, document.name);
+  form.append("maxKb", String(maxKb));
+  form.append("width", String(width));
+  form.append("height", String(height));
+
+  const response = await fetch(API_BASE + "/api/prepare-image", {
+    method: "POST",
+    body: form
+  });
+  if (!response.ok) throw new Error(await readError(response));
+
+  return {
+    blob: await response.blob(),
+    bytes: Number(response.headers.get("X-Output-Bytes") || 0),
+    width: Number(response.headers.get("X-Output-Width") || width),
+    height: Number(response.headers.get("X-Output-Height") || height)
+  };
+}
+
 export async function requestAiMappings(fields: unknown[], facts: CandidateFact[]) {
   const response = await fetch(API_BASE + "/api/ai/map", {
     method: "POST",
