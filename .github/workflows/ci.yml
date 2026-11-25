@@ -31,6 +31,12 @@ jobs:
       - name: Check local service syntax
         run: pnpm check:server
 
+      - name: Type-check web app
+        run: pnpm check:web
+
+      - name: Build web app
+        run: pnpm build:web
+
       - name: Run extraction tests
         run: pnpm test
 
