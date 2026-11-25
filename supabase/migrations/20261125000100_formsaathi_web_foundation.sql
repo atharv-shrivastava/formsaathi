@@ -23,20 +23,26 @@ create table if not exists public.documents (
   storage_path text not null unique,
   status text not null default 'uploaded'
     check (status in ('uploaded', 'extracted', 'failed')),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  unique (id, user_id),
+  check (storage_path like user_id::text || '/%')
 );
 
 create table if not exists public.extracted_facts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,
-  document_id uuid not null references public.documents (id) on delete cascade,
+  document_id uuid not null,
   fact_key text not null,
   fact_value text not null,
   confidence numeric(4,3) check (confidence >= 0 and confidence <= 1),
   evidence text,
   review_status text not null default 'pending'
     check (review_status in ('pending', 'approved', 'rejected')),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  constraint extracted_facts_document_owner_fk
+    foreign key (document_id, user_id)
+    references public.documents (id, user_id)
+    on delete cascade
 );
 
 create table if not exists public.profile_facts (
