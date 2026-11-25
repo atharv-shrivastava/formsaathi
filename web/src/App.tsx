@@ -98,11 +98,12 @@ function App() {
   }, []);
 
   if (!isSupabaseConfigured || !supabase) return <SetupScreen />;
+  const authClient = supabase;
   if (booting) {
     return <div className="loading-screen"><div className="brand-mark">F</div><span>Opening your workspace…</span></div>;
   }
   if (!session) return <AuthScreen />;
-  return <Workspace user={session.user} onSignOut={() => void supabase.auth.signOut()} />;
+  return <Workspace user={session.user} onSignOut={() => void authClient.auth.signOut()} />;
 }
 
 function SetupScreen() {
