@@ -1,3 +1,13 @@
+const personNameKeys = new Set(["applicant_name", "father_name"]);
+const salutationPrefix = /^(?:(?:mr|mrs|ms|miss|dr|prof(?:essor)?|shri|sri|smt|shrimat[iy]|kumari|master)\.?\s+)+/i;
+
+function cleanCandidateValue(key, rawValue) {
+  const compact = String(rawValue || "").trim().replace(/\s{2,}/g, " ");
+  return personNameKeys.has(key)
+    ? compact.replace(salutationPrefix, "").trim()
+    : compact;
+}
+
 const patterns = [
   {
     key: "applicant_name",
@@ -43,7 +53,7 @@ export function extractCandidateFacts(text) {
     for (const pattern of patterns) {
       const match = line.match(pattern.expression);
       if (!match) continue;
-      const value = String(match[1]).trim().replace(/\s{2,}/g, " ");
+      const value = cleanCandidateValue(pattern.key, match[1]);
       if (value.length < 2) continue;
       facts.push({
         key: pattern.key,

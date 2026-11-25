@@ -16,6 +16,7 @@
     "dev:web": "pnpm --filter @formsaathi/web dev",
     "build:web": "pnpm --filter @formsaathi/web build",
     "check:web": "pnpm --filter @formsaathi/web typecheck",
-    "build": "pnpm build:web && pnpm build:extension"
+    "build": "pnpm build:web && pnpm build:extension",
+    "dev:rapidocr": "python -m uvicorn rapidocr_service.main:app --host 127.0.0.1 --port 8788"
   }
 }

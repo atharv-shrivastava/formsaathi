@@ -440,6 +440,35 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
     }
   }
 
+  async function updateFactValue(fact: ExtractedFact, value: string) {
+    const cleanValue = value.trim().replace(/\s{2,}/g, " ");
+    if (!cleanValue) {
+      setError("A field cannot be saved as an empty value.");
+      return;
+    }
+    if (cleanValue === fact.fact_value) return;
+
+    clearNotice();
+    setBusy(true);
+    try {
+      const { data, error: updateError } = await client
+        .from("extracted_facts")
+        .update({ fact_value: cleanValue })
+        .eq("id", fact.id)
+        .eq("review_status", "pending")
+        .select("id")
+        .maybeSingle();
+      if (updateError) throw updateError;
+      if (!data) throw new Error("This candidate is no longer pending. Refresh the page and try again.");
+      setMessage(displayFactKey(fact.fact_key) + " updated. Review it before approving.");
+      await refreshData();
+    } catch (reason) {
+      setError(messageFor(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function rejectFact(fact: ExtractedFact) {
     const { error: updateError } = await client.from("extracted_facts").update({ review_status: "rejected" }).eq("id", fact.id);
     if (updateError) setError(updateError.message);
@@ -588,6 +617,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
                   documents={documents}
                   onApprove={approveFact}
                   onReject={rejectFact}
+                  onUpdate={updateFactValue}
                   busy={busy}
                 />
               )}
@@ -715,14 +745,17 @@ function DocumentsPage({
   );
 }
 
-function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onReject, busy }: {
+function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onReject, onUpdate, busy }: {
   verifiedFacts: ProfileFact[];
   pendingFacts: ExtractedFact[];
   documents: UserDocument[];
   onApprove: (fact: ExtractedFact) => void;
   onReject: (fact: ExtractedFact) => void;
+  onUpdate: (fact: ExtractedFact, value: string) => void;
   busy: boolean;
 }) {
+  const [editingFactId, setEditingFactId] = useState<string | null>(null);
+  const [draftValues, setDraftValues] = useState<Record<string, string>>({});
   const docName = (id: string) => documents.find((document) => document.id === id)?.filename || "Source document";
   return (
     <div className="page-content">
@@ -738,15 +771,45 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onReje
       <section className="surface-card review-section">
         <div className="section-head"><div><p className="eyebrow">NEEDS YOUR DECISION</p><h3>Extracted candidates</h3></div><span className={pendingFacts.length ? "review-count active" : "review-count"}>{pendingFacts.length} pending</span></div>
         {pendingFacts.length === 0 ? <EmptyState title="You're all caught up" text="New OCR results will appear here for your review." /> : (
-          <div className="candidate-list">{pendingFacts.map((fact) => (
-            <article className="candidate-row" key={fact.id}>
-              <div className="candidate-main"><div className="candidate-label">{displayFactKey(fact.fact_key)}</div><strong>{fact.fact_value}</strong><small>{docName(fact.document_id)}{fact.confidence !== null ? " · extraction heuristic " + Math.round(fact.confidence * 100) + "%" : ""}</small>{fact.evidence && <p className="evidence">“{fact.evidence}”</p>}</div>
-              <div className="candidate-actions"><button className="button approve-button" disabled={busy} onClick={() => onApprove(fact)}>✓ Use this value</button><button className="text-button reject-button" disabled={busy} onClick={() => onReject(fact)}>Dismiss</button></div>
-            </article>
-          ))}</div>
+          <div className="candidate-list">{pendingFacts.map((fact) => {
+            const isEditing = editingFactId === fact.id;
+            const draft = draftValues[fact.id] ?? fact.fact_value;
+            return (
+              <article className="candidate-row" key={fact.id}>
+                <div className="candidate-main">
+                  <div className="candidate-label">{displayFactKey(fact.fact_key)}</div>
+                  {isEditing ? (
+                    <input
+                      className="candidate-edit-input"
+                      aria-label={"Edit " + displayFactKey(fact.fact_key)}
+                      value={draft}
+                      onChange={(event) => setDraftValues((current) => ({ ...current, [fact.id]: event.target.value }))}
+                      autoFocus
+                    />
+                  ) : <strong>{fact.fact_value}</strong>}
+                  <small>{docName(fact.document_id)}{fact.confidence !== null ? " · extraction heuristic " + Math.round(fact.confidence * 100) + "%" : ""}</small>
+                  {fact.evidence && <p className="evidence">“{fact.evidence}”</p>}
+                </div>
+                <div className="candidate-actions">
+                  {isEditing ? (
+                    <>
+                      <button className="button primary candidate-save" disabled={busy || !draft.trim()} onClick={() => { onUpdate(fact, draft); setEditingFactId(null); }}>Save edit</button>
+                      <button className="text-button reject-button" disabled={busy} onClick={() => setEditingFactId(null)}>Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      <button className="text-button edit-button" disabled={busy} onClick={() => { setDraftValues((current) => ({ ...current, [fact.id]: fact.fact_value })); setEditingFactId(fact.id); }}>Edit</button>
+                      <button className="button approve-button" disabled={busy} onClick={() => onApprove(fact)}>✓ Use this value</button>
+                      <button className="text-button reject-button" disabled={busy} onClick={() => onReject(fact)}>Dismiss</button>
+                    </>
+                  )}
+                </div>
+              </article>
+            );
+          })}</div>
         )}
       </section>
-      <p className="inline-note"><span>ⓘ</span> OCR confidence is a technical estimate, not proof that a value is correct. Always compare it with the original document.</p>
+      <p className="inline-note"><span>ⓘ</span> You can edit OCR candidates before approving them. OCR confidence is a technical estimate, not proof that a value is correct. Always compare it with the original document.</p>
     </div>
   );
 }

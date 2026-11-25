@@ -248,7 +248,11 @@ code { padding: 2px 5px; border-radius: 5px; background: #f0f3f8; color: #3c5279
 .candidate-main > strong { display: block; margin-top: 4px; color: #34445e; font: 700 14px Manrope,sans-serif; overflow-wrap: anywhere; }
 .candidate-main > small { display: block; margin-top: 5px; color: #9ca7b4; font-size: 9px; }
 .evidence { margin: 8px 0 0; padding: 7px 9px; border-left: 2px solid #d7e0f4; color: #8794a8; background: #fafbfe; font-size: 9px; line-height: 1.5; }
+.candidate-edit-input { display: block; width: min(100%, 520px); min-width: 220px; height: 38px; margin-top: 7px; padding: 0 11px; border: 1px solid #cbd5e4; border-radius: 8px; outline: none; color: #34445e; background: #fff; font: 600 12px Manrope,sans-serif; }
+.candidate-edit-input:focus { border-color: #7288c4; box-shadow: 0 0 0 3px rgba(114,136,196,.12); }
 .candidate-actions { display: grid; justify-items: end; gap: 7px; flex: 0 0 auto; }
+.edit-button { color: #5d73ad; font-size: 9px; font-weight: 700; }
+.candidate-save { min-height: 34px; padding: 0 12px; font-size: 9px; }
 .approve-button { min-height: 34px; padding: 0 12px; color: #fff; background: #329b75; font-size: 9px; }
 .approve-button:hover:not(:disabled) { background: #25835f; }
 .reject-button { color: #9aa4b2; font-size: 9px; }

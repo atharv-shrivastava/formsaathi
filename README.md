@@ -6,7 +6,8 @@ AI-assisted government form guidance and autofill. The product has two user-faci
 
 - `web/`: React + Vite account workspace.
 - `extension/`: Chrome Manifest V3 extension built with WXT and React. Its current document vault is still local to the browser; account pairing is the next integration milestone.
-- `server/`: local OCR, optional AI field mapping and image preparation service.
+- `server/`: authenticated Node.js API, optional AI field mapping and image preparation service.
+- `rapidocr_service/`: private-token-protected Python API running RapidOCR on CPU.
 - `supabase/migrations/`: Postgres schema, Row Level Security policies and private Storage bucket setup.
 - `demo/`: synthetic scholarship form for extension testing.
 - `docs/`: architecture, privacy, development and extension-integration notes.
@@ -15,7 +16,7 @@ AI-assisted government form guidance and autofill. The product has two user-faci
 
 - Email/password sign-up and sign-in through Supabase Auth.
 - Private document upload and category management (PDF, JPG, PNG and WebP; 10 MB per file).
-- On-demand OCR using the existing local OCR service.
+- On-demand OCR using RapidOCR through the authenticated Node API.
 - Candidate facts are saved as pending and must be individually reviewed before they enter the user's verified profile.
 - Application progress tracker.
 - Privacy centre with data deletion for documents, extracted candidates, verified profile facts and application records.
@@ -24,7 +25,7 @@ AI-assisted government form guidance and autofill. The product has two user-faci
 
 Supabase is the account and data layer: Auth identifies the user, Postgres stores user-owned metadata and reviewed facts, and a private Storage bucket holds original files. Row Level Security (RLS) scopes every user-owned table and the Storage bucket to the authenticated user.
 
-The current OCR service remains a local development service bound to `127.0.0.1:8787`. It is not a hosted or authenticated public API. The extension has not yet been paired with web accounts. See [the extension integration plan](docs/EXTENSION_INTEGRATION.md).
+The browser talks only to the Node API. That API checks the Supabase user session, enforces upload and rate limits, then forwards the preprocessed image to the separate RapidOCR service using a private server-to-server token. The Python service processes image bytes in memory and does not write uploaded files to disk. The extension has not yet been paired with web accounts. See [the extension integration plan](docs/EXTENSION_INTEGRATION.md).
 
 ## Prerequisites
 
@@ -56,11 +57,21 @@ From the repository root:
 
 Copy `server/.env.example` to `server/.env` and `web/.env.example` to `web/.env.local`.
 
-Start the local OCR service in one terminal:
+Install the Python OCR dependencies once:
+
+    python -m pip install -r rapidocr_service/requirements.txt
+
+Start RapidOCR in one terminal:
+
+    pnpm dev:rapidocr
+
+Start the authenticated Node API in a second terminal:
 
     pnpm dev:server
 
-Start the web app in another:
+The local values in `server/.env.example` point the Node API at `127.0.0.1:8788` and use a development-only shared token. Keep that token local; production uses a separate Render environment value.
+
+Start the web app in a third terminal:
 
     pnpm dev:web
 
@@ -77,7 +88,8 @@ Load `extension/.output/chrome-mv3-dev` from `chrome://extensions`. The extensio
 - `pnpm dev:web`: start the Vite web app.
 - `pnpm build:web`: build the web app.
 - `pnpm check:web`: type-check the web app.
-- `pnpm dev:server`: run local OCR API.
+- `pnpm dev:server`: run the authenticated Node API.
+- `pnpm dev:rapidocr`: run the local Python RapidOCR API.
 - `pnpm dev:extension`: run the Chrome extension dev build.
 - `pnpm build:extension`: build the extension.
 - `pnpm check:server`: check backend JavaScript syntax.
@@ -92,8 +104,9 @@ The extension does not automatically submit government applications. CAPTCHA, pa
 ## Current limitations
 
 - The extension is not yet connected to Supabase accounts or the web app. Pairing and extension access to verified profile facts are next.
-- OCR runs only against the local development service; hosted, authenticated OCR is not implemented.
-- OCR is English-first and candidate extraction uses labelled-line heuristics.
+- The hosted RapidOCR processor uses a free CPU service and may take longer on its first request or after inactivity.
+- Candidate extraction still uses labelled-line heuristics; OCR text is not automatically treated as verified profile data.
+- The default RapidOCR model is English-oriented. Hindi/Devanagari recognition requires configuring and evaluating the corresponding RapidOCR model before relying on it.
 - Category retrieval does not yet distinguish every document subtype such as Class 10 versus Class 12 unless separately classified.
 - Complex custom widgets, closed Shadow DOM, canvas-rendered forms and cross-origin frames may require manual assistance.
 - File inputs must be attached manually.

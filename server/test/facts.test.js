@@ -21,3 +21,19 @@ test("extracts labelled candidate facts without treating them as verified", () =
   assert.equal(facts.find((fact) => fact.key === "ifsc_code")?.value, "ABCD0123456");
   assert.ok(facts.every((fact) => fact.confidence < 1));
 });
+
+
+test("removes leading salutations from extracted applicant and father names", () => {
+  const facts = extractCandidateFacts([
+    "Applicant Name: Mr. Atharv Shrivastava",
+    "Father's Name: Shri Shashi Shrivastava"
+  ].join("\n"));
+
+  assert.equal(facts.find((fact) => fact.key === "applicant_name")?.value, "Atharv Shrivastava");
+  assert.equal(facts.find((fact) => fact.key === "father_name")?.value, "Shashi Shrivastava");
+});
+
+test("does not strip title-like text embedded in a real name", () => {
+  const facts = extractCandidateFacts("Applicant Name: Mrinal Sharma");
+  assert.equal(facts.find((fact) => fact.key === "applicant_name")?.value, "Mrinal Sharma");
+});

@@ -37,9 +37,18 @@ In another terminal, copy `server/.env.example` to `server/.env` and run:
 
     pnpm dev:server
 
-The service listens on `127.0.0.1:8787`. The web app downloads the user's selected private document in the browser and sends it to this local service only after the user clicks Run OCR. Candidate facts are stored as pending rows. Approve a candidate on the Information profile page before it becomes a verified profile fact.
+Install and start RapidOCR in one terminal:
 
-The OCR service is for local development only. It is not authenticated and must not be exposed to the public internet.
+    python -m pip install -r rapidocr_service/requirements.txt
+    pnpm dev:rapidocr
+
+The Python service listens on `127.0.0.1:8788`. In another terminal, start the authenticated Node API:
+
+    pnpm dev:server
+
+The Node API listens on `127.0.0.1:8787`, verifies the Supabase access token, enforces upload/rate limits and calls RapidOCR with a private shared token. The browser sends a selected private document only after the user clicks Run OCR. Candidate facts are stored as pending rows. You can edit a candidate on the Information profile page, then approve it to move it into the verified profile.
+
+Do not expose the Python RapidOCR service directly to the public internet. The shared token is for server-to-server use only.
 
 ## Start the extension
 
@@ -72,7 +81,7 @@ Open `http://127.0.0.1:4173/scholarship-form.html`. Use synthetic documents and 
 - [ ] Verify Supabase Auth, RLS policies and private Storage against two different test accounts.
 - [ ] Add OCR integration tests and more document layouts.
 - [ ] Implement secure web-to-extension pairing and token revocation.
-- [ ] Build an authenticated hosted OCR API before cloud deployment.
+- [ ] Evaluate OCR quality on representative English and Hindi government documents before real use.
 - [ ] Add password reset, MFA and account deletion.
 - [ ] Add extension tests for dynamic forms, frames and scroll/zoom behavior.
 - [ ] Restrict extension matches to supported domains for release.
