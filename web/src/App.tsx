@@ -55,6 +55,15 @@ function displayFactKey(key: string) {
   return factLabels[key] || key.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function isSafeHttpUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 function messageFor(error: unknown) {
   return error instanceof Error ? error.message : "Something went wrong. Please try again.";
 }
@@ -430,10 +439,15 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
     event.preventDefault();
     if (!applicationTitle.trim()) return;
     clearNotice();
+    const cleanUrl = applicationUrl.trim();
+    if (cleanUrl && !isSafeHttpUrl(cleanUrl)) {
+      setError("Use a regular HTTP or HTTPS portal URL.");
+      return;
+    }
     const { error: insertError } = await client.from("applications").insert({
       user_id: user.id,
       title: applicationTitle.trim(),
-      portal_url: applicationUrl.trim() || null,
+      portal_url: cleanUrl || null,
       status: "not_started"
     });
     if (insertError) setError(insertError.message);
@@ -740,7 +754,7 @@ function ApplicationsPage({ applications, title, url, onTitleChange, onUrlChange
         <div className="application-list">{applications.map((application) => (
           <article className="surface-card application-row" key={application.id}>
             <div className="application-icon">▣</div><div className="application-info"><strong>{application.title}</strong><small>{application.portal_url || "No portal link added"} · Added {formatDate(application.created_at)}</small></div>
-            {application.portal_url && <a className="text-button" href={application.portal_url} target="_blank" rel="noreferrer">Open portal ↗</a>}
+            {application.portal_url && isSafeHttpUrl(application.portal_url) && <a className="text-button" href={application.portal_url} target="_blank" rel="noreferrer">Open portal ↗</a>}
             <select className="table-select status-select" value={application.status} onChange={(event) => onStatusChange(application, event.target.value as TrackedApplication["status"])}>
               <option value="not_started">Not started</option><option value="in_progress">In progress</option><option value="ready_to_submit">Ready to review</option><option value="submitted">Submitted</option>
             </select>
