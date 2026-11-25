@@ -233,6 +233,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [uploadCategory, setUploadCategory] = useState<DocumentCategory>("identity");
+  const [cloudConsent, setCloudConsent] = useState(false);
   const [applicationTitle, setApplicationTitle] = useState("");
   const [applicationUrl, setApplicationUrl] = useState("");
 
@@ -279,6 +280,10 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
     event.target.value = "";
     if (!file) return;
     clearNotice();
+    if (!cloudConsent) {
+      setError("Confirm the private cloud storage notice before uploading a document.");
+      return;
+    }
     const allowed = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
     if (!allowed.includes(file.type)) {
       setError("Choose a PDF, JPG, PNG or WebP file.");
@@ -535,7 +540,6 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         <div className="page-wrap">
           <div className="page-heading">
             <div><p className="eyebrow">YOUR SPACE</p><h1>{pageInfo.title}</h1><p>{pageInfo.subtitle}</p></div>
-            {page === "documents" && <label className="button primary upload-top">＋ Add document<input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" onChange={handleUpload} hidden /></label>}
           </div>
 
           {message && <div className="notice success-notice" role="status"><span>✓</span>{message}<button onClick={() => setMessage("")} aria-label="Dismiss">×</button></div>}
@@ -557,6 +561,8 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
                 <DocumentsPage
                   documents={documents}
                   category={uploadCategory}
+                  cloudConsent={cloudConsent}
+                  onCloudConsentChange={setCloudConsent}
                   onCategoryChange={setUploadCategory}
                   onUpload={handleUpload}
                   onRunOcr={runOcr}
@@ -660,10 +666,12 @@ function ChecklistItem({ complete, title, description, onClick }: { complete: bo
 }
 
 function DocumentsPage({
-  documents, category, onCategoryChange, onUpload, onRunOcr, onDelete, onUpdateCategory, busyDocument, busy
+  documents, category, cloudConsent, onCloudConsentChange, onCategoryChange, onUpload, onRunOcr, onDelete, onUpdateCategory, busyDocument, busy
 }: {
   documents: UserDocument[];
   category: DocumentCategory;
+  cloudConsent: boolean;
+  onCloudConsentChange: (value: boolean) => void;
   onCategoryChange: (category: DocumentCategory) => void;
   onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
   onRunOcr: (document: UserDocument) => void;
@@ -675,8 +683,8 @@ function DocumentsPage({
   return (
     <div className="page-content">
       <section className="surface-card upload-card">
-        <div className="upload-copy"><div className="upload-symbol">＋</div><div><h3>Add a document</h3><p>PDF, JPG, PNG or WebP · Up to 10 MB per file</p></div></div>
-        <div className="upload-controls"><label className="category-picker"><span>Document type</span><select value={category} onChange={(event) => onCategoryChange(event.target.value as DocumentCategory)}>{categoryOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label className={busy ? "button primary disabled" : "button primary"}>Choose file<input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" onChange={onUpload} disabled={busy} hidden /></label></div>
+        <div className="upload-main"><div className="upload-copy"><div className="upload-symbol">＋</div><div><h3>Add a document</h3><p>PDF, JPG, PNG or WebP · Up to 10 MB per file</p></div></div><label className="cloud-consent"><input type="checkbox" checked={cloudConsent} onChange={(event) => onCloudConsentChange(event.target.checked)} /><span>I understand this uploads a copy to my private FormSaathi cloud vault. I will use synthetic documents for this MVP demo.</span></label></div>
+        <div className="upload-controls"><label className="category-picker"><span>Document type</span><select value={category} onChange={(event) => onCategoryChange(event.target.value as DocumentCategory)}>{categoryOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label className={!cloudConsent || busy ? "button primary disabled" : "button primary"}>Choose file<input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" onChange={onUpload} disabled={!cloudConsent || busy} hidden /></label></div>
       </section>
       <div className="section-head document-list-head"><div><p className="eyebrow">YOUR PRIVATE STORAGE</p><h3>Uploaded documents <span className="inline-count">{documents.length}</span></h3></div><span className="vault-label">⌑ Private vault</span></div>
       {documents.length === 0 ? <section className="surface-card empty-large"><div className="empty-illustration">▤</div><h3>No documents yet</h3><p>Upload a document and choose the closest category. You can change it later.</p></section> : (
