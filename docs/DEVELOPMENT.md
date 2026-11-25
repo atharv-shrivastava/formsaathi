@@ -4,68 +4,77 @@
 
 - Node.js 22.12+ or a current 24.x LTS release.
 - pnpm 12.22.0.
-- Google Chrome or Chromium.
+- A Supabase project for the web workspace.
+- Google Chrome or Chromium for extension work.
 
-Install the pinned package-manager version if needed:
+Install the pinned package manager if needed:
 
     npm install --global pnpm@12.22.0
 
-## Local setup
+## Supabase setup
+
+1. Create a Supabase project.
+2. Run `supabase/migrations/20261125000100_formsaathi_web_foundation.sql` in the SQL Editor.
+3. Copy `web/.env.example` to `web/.env.local` and add the Project URL and publishable key.
+4. Add `http://localhost:5173/**` and `http://127.0.0.1:5173/**` to Auth redirect URLs.
+5. Never use the Supabase service-role/secret key in the browser.
+
+## Start the web application
 
 From the repository root:
 
     pnpm install
-    Copy-Item server/.env.example server/.env
+
+Then start:
+
+    pnpm dev:web
+
+Open `http://localhost:5173`. Sign up with an email address, confirm the email if Supabase email confirmation is enabled, and sign in. Upload a synthetic PDF/image and choose a category.
+
+## Start local OCR
+
+In another terminal, copy `server/.env.example` to `server/.env` and run:
+
     pnpm dev:server
 
-On macOS/Linux, use:
+The service listens on `127.0.0.1:8787`. The web app downloads the user's selected private document in the browser and sends it to this local service only after the user clicks Run OCR. Candidate facts are stored as pending rows. Approve a candidate on the Information profile page before it becomes a verified profile fact.
 
-    cp server/.env.example server/.env
+The OCR service is for local development only. It is not authenticated and must not be exposed to the public internet.
 
-In another terminal:
+## Start the extension
 
     pnpm dev:extension
 
-Load the generated Chrome MV3 development directory from extension/.output/chrome-mv3-dev at chrome://extensions.
+Load `extension/.output/chrome-mv3-dev` at `chrome://extensions`. The current extension still uses its own IndexedDB vault. The web-to-extension account pairing flow is a separate next milestone; do not treat a web login as connected to the extension yet.
 
 ## Run the mock scholarship form
 
-Start a simple static server from the repository root:
+Start a static server from the repository root:
 
     py -m http.server 4173 --directory demo
 
-Open http://127.0.0.1:4173/scholarship-form.html. The demo contains fictitious data fields and a file upload control. Do not enter personal information.
-
-## Test workflow
-
-1. Prepare synthetic sample documents with labelled lines such as Applicant Name, Date of Birth and Annual Family Income.
-2. Add each file to the vault and choose the category. Confirm the UI reports that OCR has not run.
-3. Open the mock scholarship form and click Scan current page.
-4. Confirm only categories required by the detected fields are OCR-processed.
-5. Select Highlight on page and check the outline follows the field while scrolling.
-6. Edit a suggested value, then approve and fill one field at a time.
-7. Verify dropdown matching only succeeds on an exact option. File inputs should remain manual.
+Open `http://127.0.0.1:4173/scholarship-form.html`. Use synthetic documents and fake details only.
 
 ## Commands
 
-- pnpm dev:server: run the local OCR API.
-- pnpm dev:extension: run the Chrome extension dev build.
-- pnpm build:extension: build the extension.
-- pnpm check:server: check backend JavaScript syntax.
-- pnpm test: run candidate extraction tests.
-
-## Current OCR scope
-
-The server supports images and PDFs. PDFs with embedded text use PDF text extraction; image-only pages are rendered and sent through Tesseract. English is configured by default. Add language packs only after preparing a representative evaluation set.
+- `pnpm dev:web`: run the web app.
+- `pnpm check:web`: type-check the web app.
+- `pnpm build:web`: build the web app.
+- `pnpm dev:server`: run local OCR API.
+- `pnpm dev:extension`: run the Chrome extension dev build.
+- `pnpm build:extension`: build the extension.
+- `pnpm check:server`: check local server JavaScript syntax.
+- `pnpm test`: run candidate extraction tests.
 
 ## Development checklist
 
-- [ ] Generate and commit pnpm-lock.yaml, then use frozen-lockfile in CI.
-- [ ] Add unit tests for field alias mapping and more document layouts.
+- [ ] Generate and commit `pnpm-lock.yaml`, then switch CI to frozen-lockfile.
+- [ ] Verify Supabase Auth, RLS policies and private Storage against two different test accounts.
+- [ ] Add OCR integration tests and more document layouts.
+- [ ] Implement secure web-to-extension pairing and token revocation.
+- [ ] Build an authenticated hosted OCR API before cloud deployment.
+- [ ] Add password reset, MFA and account deletion.
 - [ ] Add extension tests for dynamic forms, frames and scroll/zoom behavior.
-- [ ] Add a local API pairing token and strict origin allowlist.
-- [ ] Restrict matches to supported domains for release.
-- [ ] Add per-document language selection and OCR quality evaluation.
-- [ ] Add source-page/region highlighting in the review UI.
-- [ ] Add properly encrypted storage and key lifecycle before real PII use.
-- [ ] Review all dependency and model licences before distribution.
+- [ ] Restrict extension matches to supported domains for release.
+- [ ] Add document-language selection and OCR quality evaluation.
+- [ ] Complete a security and privacy review before real personal data is used.
