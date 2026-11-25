@@ -4,6 +4,7 @@ import { createCanvas } from "@napi-rs/canvas";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { extractCandidateFacts } from "./facts.js";
 
+const maxImagePixels = 20_000_000;
 let workerPromise;
 
 async function getOcrWorker() {
@@ -12,7 +13,13 @@ async function getOcrWorker() {
 }
 
 async function recognizeImage(buffer) {
-  const prepared = await sharp(buffer)
+  const image = sharp(buffer, { limitInputPixels: maxImagePixels });
+  const metadata = await image.metadata();
+  if (!metadata.width || !metadata.height || metadata.width * metadata.height > maxImagePixels) {
+    throw new Error("Image dimensions are too large. Resize the image and retry.");
+  }
+
+  const prepared = await sharp(buffer, { limitInputPixels: maxImagePixels })
     .rotate()
     .resize({ width: 2400, withoutEnlargement: true })
     .grayscale()
@@ -70,7 +77,10 @@ async function recognizePdf(buffer) {
         continue;
       }
 
-      const viewport = page.getViewport({ scale: 1.8 });
+      const viewport = page.getViewport({ scale: 1.5 });
+      if (viewport.width * viewport.height > maxImagePixels) {
+        throw new Error("A PDF page is too large to process safely. Split or resize the document.");
+      }
       const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
       const context = canvas.getContext("2d");
       await page.render({ canvasContext: context, viewport }).promise;
@@ -88,10 +98,10 @@ export async function processDocument(file) {
   let text;
   if (file.mimetype === "application/pdf" || filename.endsWith(".pdf")) {
     text = await recognizePdf(file.buffer);
-  } else if (String(file.mimetype || "").startsWith("image/")) {
+  } else if (["image/jpeg", "image/png", "image/webp"].includes(file.mimetype)) {
     text = await recognizeImage(file.buffer);
   } else {
-    throw new Error("Only PDF and image documents are supported.");
+    throw new Error("Only PDF, JPEG, PNG and WebP documents are supported.");
   }
   return { text, facts: extractCandidateFacts(text) };
 }
