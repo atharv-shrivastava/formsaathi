@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { isSupabaseConfigured, ocrApiUrl, supabase } from "./lib/supabase";
 import type {
@@ -274,7 +274,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
     setError("");
   }
 
-  async function handleUpload(event: React.ChangeEvent<HTMLInputElement>) {
+  async function handleUpload(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
@@ -665,7 +665,7 @@ function DocumentsPage({
   documents: UserDocument[];
   category: DocumentCategory;
   onCategoryChange: (category: DocumentCategory) => void;
-  onUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onUpload: (event: ChangeEvent<HTMLInputElement>) => void;
   onRunOcr: (document: UserDocument) => void;
   onDelete: (document: UserDocument) => void;
   onUpdateCategory: (document: UserDocument, category: DocumentCategory) => void;
