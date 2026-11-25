@@ -2,3 +2,7 @@ packages:
   - extension
   - server
   - web
+
+allowBuilds:
+  sharp: true
+  tesseract.js: true
