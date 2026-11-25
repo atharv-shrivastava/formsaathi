@@ -19,7 +19,7 @@ Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 
 app = FastAPI(title="FormSaathi RapidOCR", version="1.0.0")
 _engine: RapidOCR | None = None
-_engine_lock = threading.Lock()
+_engine_lock = threading.RLock()
 
 
 def get_engine() -> RapidOCR:
