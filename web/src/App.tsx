@@ -710,7 +710,7 @@ function DocumentsPage({
           ))}
         </div>
       )}
-      <p className="inline-note"><span>ⓘ</span> Uploading stores the original file. OCR runs only when you select Run OCR. Extracted values remain unverified until you approve them in your profile.</p>
+      <p className="inline-note"><span>ⓘ</span> Uploading stores the original file in your private vault. When you click Run OCR, that selected file is sent over HTTPS to FormSaathi's hosted OCR processor; the processor handles it in memory and does not save it to its own disk. Extracted values remain unverified until you approve them.</p>
     </div>
   );
 }
@@ -795,7 +795,7 @@ function PrivacyPage({ userEmail, documentCount, factCount, onClear, busy }: {
       <section className="privacy-hero"><div className="privacy-symbol">⌑</div><div><p className="eyebrow light">YOUR DATA. YOUR CALL.</p><h2>Privacy should be part of the product.</h2><p>FormSaathi is designed to process only what you choose and keep you in control of every suggested value.</p></div></section>
       <div className="privacy-grid">
         <section className="surface-card privacy-card"><div className="privacy-card-icon">▣</div><h3>Private document storage</h3><p>Files are stored in a non-public Supabase Storage bucket. Row-level security policies restrict access to the authenticated owner.</p><span className="privacy-status">Configured in database migration</span></section>
-        <section className="surface-card privacy-card"><div className="privacy-card-icon">⌁</div><h3>On-demand OCR</h3><p>Uploading a document does not automatically run OCR. You choose when to process a file, and candidate values need your approval.</p><span className="privacy-status">User initiated</span></section>
+        <section className="surface-card privacy-card"><div className="privacy-card-icon">⌁</div><h3>On-demand OCR</h3><p>Uploading a document does not automatically run OCR. When you choose Run OCR, that file is sent over HTTPS to our hosted OCR processor for in-memory processing. Candidate values need your approval.</p><span className="privacy-status">User initiated</span></section>
         <section className="surface-card privacy-card"><div className="privacy-card-icon">◈</div><h3>Limited profile data</h3><p>The extension integration is designed to retrieve only reviewed fields needed for the current form, not your entire document vault.</p><span className="privacy-status">Extension pairing is next</span></section>
         <section className="surface-card privacy-card"><div className="privacy-card-icon">↺</div><h3>Delete your data</h3><p>Remove uploaded files, extracted candidates, reviewed profile values and application tracker entries while keeping your login account.</p><span className="privacy-status">{documentCount} documents · {factCount} reviewed fields</span></section>
       </div>
