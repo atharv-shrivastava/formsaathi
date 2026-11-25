@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { isSupabaseConfigured, ocrApiUrl, supabase } from "./lib/supabase";
 import type {
@@ -246,7 +246,12 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
   }, [client]);
 
   useEffect(() => {
-    void client.from("profiles").upsert({ id: user.id }, { onConflict: "id", ignoreDuplicates: true });
+    const fullName = typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name.trim() : "";
+    if (fullName) {
+      void client.from("profiles").upsert({ id: user.id, full_name: fullName }, { onConflict: "id" });
+    } else {
+      void client.from("profiles").upsert({ id: user.id }, { onConflict: "id", ignoreDuplicates: true });
+    }
     void refreshData();
   }, [client, refreshData, user.id]);
 
@@ -777,5 +782,4 @@ function EmptyState({ title, text }: { title: string; text: string }) {
   return <div className="empty-state"><div className="empty-mark">◇</div><strong>{title}</strong><p>{text}</p></div>;
 }
 
-void (null as ReactNode | null);
 export default App;
