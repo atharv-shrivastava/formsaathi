@@ -364,7 +364,15 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
       if (downloadError || !fileData) throw downloadError || new Error("Could not download this document from private storage.");
       const form = new FormData();
       form.append("file", fileData, document.filename);
-      const response = await fetch(ocrApiUrl + "/api/ocr", { method: "POST", body: form });
+      const { data: sessionData, error: sessionError } = await client.auth.getSession();
+      if (sessionError || !sessionData.session?.access_token) {
+        throw new Error("Your sign-in session has expired. Sign in again and retry.");
+      }
+      const response = await fetch(ocrApiUrl + "/api/ocr", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + sessionData.session.access_token },
+        body: form
+      });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "OCR service could not process this document.");
       const extracted = Array.isArray(payload.facts) ? payload.facts : [];
@@ -392,7 +400,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
     } catch (reason) {
       const detail = messageFor(reason);
       setError(detail.includes("Failed to fetch")
-        ? "Could not reach the local OCR service. Start it with pnpm dev:server and try again."
+        ? "Could not reach the OCR service. It may be starting up; check your connection and retry."
         : detail);
       await client.from("documents").update({ status: "failed" }).eq("id", document.id);
     } finally {
