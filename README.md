@@ -1,115 +1,106 @@
 # FormSaathi
 
-AI-assisted, privacy-first government form guidance and autofill prototype.
+AI-assisted government form guidance and autofill. The product has two user-facing parts: a web app for account and document management, and a browser extension for understanding supported forms and filling fields only after user approval.
 
-FormSaathi helps a citizen organize documents, inspect a web form, retrieve only document categories relevant to that form, extract evidence-backed facts locally, review proposed mappings, and fill fields only after explicit approval. It never automatically submits a government application.
+## Current repository layout
 
-## What is implemented
+- `web/`: React + Vite account workspace.
+- `extension/`: Chrome Manifest V3 extension built with WXT and React. Its current document vault is still local to the browser; account pairing is the next integration milestone.
+- `server/`: local OCR, optional AI field mapping and image preparation service.
+- `supabase/migrations/`: Postgres schema, Row Level Security policies and private Storage bucket setup.
+- `demo/`: synthetic scholarship form for extension testing.
+- `docs/`: architecture, privacy, development and extension-integration notes.
 
-- Chrome Manifest V3 extension built with WXT and React.
-- Local document vault in browser IndexedDB; adding a file does not trigger OCR or upload.
-- Filename-based category suggestions with user-editable categories.
-- On-demand inspection of visible inputs, textareas and select elements.
-- Category-driven retrieval: only relevant document categories are sent to the local OCR service after the user scans a form.
-- Local OCR API using Tesseract.js, PDF.js and Sharp, bound to 127.0.0.1.
-- Conservative, evidence-linked extraction for a small set of labelled fields.
-- Semantic field aliases and optional, consent-gated Gemini mapping.
-- Shadow-DOM overlay with a field outline, tooltip and pointer line.
-- Cross-document conflicts are surfaced for human resolution instead of silently selecting one value.
-- Per-field review and approval before autofill.
-- Image preparation: resize and compress a JPEG copy to portal-specified maximum dimensions and size.
-- Synthetic scholarship form and a small extraction test.
-- GitHub Actions workflow for server syntax checks, extraction tests and extension build.
+## Web app features
 
-## Repository layout
+- Email/password sign-up and sign-in through Supabase Auth.
+- Private document upload and category management (PDF, JPG, PNG and WebP; 10 MB per file).
+- On-demand OCR using the existing local OCR service.
+- Candidate facts are saved as pending and must be individually reviewed before they enter the user's verified profile.
+- Application progress tracker.
+- Privacy centre with data deletion for documents, extracted candidates, verified profile facts and application records.
 
-- extension/: Chrome extension and UI.
-- server/: local OCR, optional AI mapping and image preparation API.
-- demo/: synthetic scholarship form for testing.
-- docs/: architecture, privacy and development notes.
+## Architecture
+
+Supabase is the account and data layer: Auth identifies the user, Postgres stores user-owned metadata and reviewed facts, and a private Storage bucket holds original files. Row Level Security (RLS) scopes every user-owned table and the Storage bucket to the authenticated user.
+
+The current OCR service remains a local development service bound to `127.0.0.1:8787`. It is not a hosted or authenticated public API. The extension has not yet been paired with web accounts. See [the extension integration plan](docs/EXTENSION_INTEGRATION.md).
 
 ## Prerequisites
 
 - Node.js 22.12+ or a current 24.x LTS release.
-- pnpm 12.22.0 (pinned in package.json).
-- Google Chrome or Chromium.
-- Optional: Gemini API key for the opt-in mapping experiment.
+- pnpm 12.22.0.
+- A Supabase project for the web app.
+- Chrome or Chromium for extension development.
 
-## Install pnpm
-
-On Windows, install the pinned version with npm:
+Install the pinned package manager if needed:
 
     npm install --global pnpm@12.22.0
 
-Alternatively, use the official pnpm installer. The project pins its expected version in package.json.
+## Supabase setup
+
+1. Create a Supabase project.
+2. Open the Supabase SQL Editor and run `supabase/migrations/20261125000100_formsaathi_web_foundation.sql`.
+3. In Project Settings → API Keys, copy the Project URL and the **publishable** key.
+4. Copy `web/.env.example` to `web/.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`.
+5. In Authentication → URL Configuration, set the local Site URL to `http://localhost:5173` and add `http://localhost:5173/**` and `http://127.0.0.1:5173/**` as redirect URLs.
+6. Keep the service-role/secret key out of the web app and out of Git.
+
+The migration creates user-owned tables with RLS and a **private** `formsaathi-documents` bucket. The web app uses only the publishable key; access is limited by the signed-in user's policies.
 
 ## Run locally
 
 From the repository root:
 
-1. Install workspace dependencies and generate pnpm-lock.yaml:
+    pnpm install
 
-       pnpm install
+Copy `server/.env.example` to `server/.env` and `web/.env.example` to `web/.env.local`.
 
-2. Create the local API environment file:
-   - Windows PowerShell: Copy-Item server/.env.example server/.env
-   - macOS/Linux: cp server/.env.example server/.env
+Start the local OCR service in one terminal:
 
-3. Start the local OCR service in one terminal:
+    pnpm dev:server
 
-       pnpm dev:server
+Start the web app in another:
 
-4. Start the extension dev build in another terminal:
+    pnpm dev:web
 
-       pnpm dev:extension
+Open `http://localhost:5173`, create an account, upload a synthetic document and choose **Run OCR** from the document list. OCR requires the local service to be running. Review the candidates under Information profile before approving them.
 
-5. Open chrome://extensions, enable Developer mode, and load extension/.output/chrome-mv3-dev.
+To run the extension separately:
 
-6. Start the mock form from the repository root:
+    pnpm dev:extension
 
-       py -m http.server 4173 --directory demo
+Load `extension/.output/chrome-mv3-dev` from `chrome://extensions`. The extension still uses its local IndexedDB vault until account pairing is implemented.
 
-7. Open http://127.0.0.1:4173/scholarship-form.html. Add synthetic documents to the extension, then scan the mock form.
+## Commands
 
-The first OCR run may download Tesseract language data. Keep the local service running while testing the extension.
-
-## Current workflow
-
-1. Add a PDF/image and choose or confirm its document category. Category can be suggested from the filename.
-2. Open the mock form and click Scan current page.
-3. FormSaathi inspects visible DOM controls, maps recognised field labels to information keys and selects documents in the corresponding categories.
-4. Only those selected documents are sent to local OCR. Unrelated categories are left untouched.
-5. Review each extracted value and its source evidence. Use Highlight on page to show its target.
-6. Edit the value if needed and click Approve & fill this field. Each field requires its own approval.
-7. For image uploads, set the maximum KB and dimensions, choose Prepare JPEG copy, and manually attach the downloaded copy on the portal.
-8. Review the portal yourself and submit it yourself.
+- `pnpm dev:web`: start the Vite web app.
+- `pnpm build:web`: build the web app.
+- `pnpm check:web`: type-check the web app.
+- `pnpm dev:server`: run local OCR API.
+- `pnpm dev:extension`: run the Chrome extension dev build.
+- `pnpm build:extension`: build the extension.
+- `pnpm check:server`: check backend JavaScript syntax.
+- `pnpm test`: run candidate extraction tests.
 
 ## Important prototype safety note
 
-Use synthetic documents only until a production-grade security review is complete. Files and OCR caches are stored in browser IndexedDB, which is not an encrypted document vault. The local API is loopback-only and rejects foreign browser origins, but it is still a development service, not a production security boundary. The optional Gemini adapter sends selected extracted facts and field descriptors only after a confirmation. Do not send Aadhaar, PAN, bank, income or other real personal data to an external model in this prototype.
+Use synthetic documents for demos until the Supabase project, RLS policies, access controls, backup retention, OCR service and deployment have been reviewed. Supabase Storage is configured as private, but this MVP is not end-to-end encrypted and has not had an independent security audit. Do not expose the current unauthenticated local OCR service to the public internet. Do not send Aadhaar, PAN, bank, income or other real personal data to the optional external AI route in this prototype.
 
-The extension uses broad HTTP/HTTPS page matching for this prototype, but does not inspect a page until the user clicks Scan current page. Before release, restrict supported origins, minimize permissions, add a hardened local API pairing/authentication flow, encrypt stored files and facts, and conduct security and privacy testing.
+The extension does not automatically submit government applications. CAPTCHA, payments, identity verification and final submission stay under the applicant's control.
 
 ## Current limitations
 
-- OCR is English-first by default; regional-language packs and document-specific evaluation are still needed.
-- Candidate extraction uses conservative labelled-line heuristics, not a trained government-document model.
-- Category retrieval is a first MVP. It does not yet distinguish every document subtype such as Class 10 versus Class 12 unless the user classifies them separately.
+- The extension is not yet connected to Supabase accounts or the web app. Pairing and extension access to verified profile facts are next.
+- OCR runs only against the local development service; hosted, authenticated OCR is not implemented.
+- OCR is English-first and candidate extraction uses labelled-line heuristics.
+- Category retrieval does not yet distinguish every document subtype such as Class 10 versus Class 12 unless separately classified.
 - Complex custom widgets, closed Shadow DOM, canvas-rendered forms and cross-origin frames may require manual assistance.
-- File inputs are detected but cannot be populated by arbitrary JavaScript. FormSaathi prepares a copy and guides the user to attach it manually.
-- Image preparation outputs JPEG only. PDF conversion and signature/photo presets are not implemented yet.
-- CAPTCHA, payment, final submission and other sensitive actions remain user-controlled.
-- No eligibility decision is authoritative. Users must check scheme rules and official instructions.
-
-## Checks
-
-- pnpm check:server validates local service JavaScript syntax.
-- pnpm test runs candidate-extraction tests.
-- pnpm build:extension builds the Chrome extension.
-- GitHub Actions runs these checks on pushes and pull requests to main.
+- File inputs must be attached manually.
+- The web app currently supports email/password accounts, document metadata, candidate review and a basic application tracker. Password reset, account deletion, MFA and production audit logging remain future work.
 
 ## Lockfile note
 
-The initial pnpm migration does not yet include a generated pnpm-lock.yaml. Run pnpm install once and commit the generated lockfile. Then update GitHub Actions to use pnpm install --frozen-lockfile for reproducible CI installs.
+The initial pnpm migration does not yet include a generated `pnpm-lock.yaml`. Run `pnpm install` once and commit the generated lockfile. Then switch CI to `pnpm install --frozen-lockfile`.
 
-See docs/ARCHITECTURE.md, docs/PRIVACY.md and docs/DEVELOPMENT.md.
+See `docs/ARCHITECTURE.md`, `docs/PRIVACY.md`, `docs/DEVELOPMENT.md` and `docs/EXTENSION_INTEGRATION.md`.
