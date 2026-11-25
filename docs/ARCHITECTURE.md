@@ -7,14 +7,14 @@ FormSaathi has two interfaces:
 - `web/` is the account and document-management workspace. It is the source of truth for account-owned documents, OCR candidate facts and user-reviewed profile facts.
 - `extension/` inspects supported browser forms, guides the user and performs field-level autofill after explicit approval. It is not yet connected to web accounts; the pairing and data API are the next milestone.
 
-The local `server/` currently provides OCR, image preparation and optional AI field mapping for development. It is not a public production API.
+The `server/` provides the OCR, image-preparation and optional AI-mapping API. Hosted requests require a valid Supabase access token, a configured browser origin, upload-type validation and per-user rate limits. The service uses the Supabase publishable key only to verify user sessions; it does not use a service-role key.
 
 ## Web app data flow
 
 1. Supabase Auth creates the user session.
 2. The browser uploads a selected PDF/image to a private Storage bucket under a folder named with the authenticated user's UUID.
 3. The browser inserts document metadata into `public.documents`; RLS requires `user_id = auth.uid()`.
-4. OCR runs only after the user selects Run OCR. The web app downloads that one file from private Storage and sends it to the local OCR service.
+4. OCR runs only after the user selects Run OCR. The web app downloads that one file from private Storage and sends it over HTTPS to the hosted OCR API with the current user's Supabase access token.
 5. Candidate values are saved in `public.extracted_facts` with status `pending`.
 6. The user reviews each candidate and explicitly approves it. Approved values are upserted into `public.profile_facts`.
 7. The extension integration will retrieve only requested verified facts under the same user's RLS-protected session.
