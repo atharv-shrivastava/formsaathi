@@ -138,7 +138,12 @@ values (
   10485760,
   array['application/pdf', 'image/jpeg', 'image/png', 'image/webp']
 )
-on conflict (id) do nothing;
+on conflict (id) do update
+set
+  name = excluded.name,
+  public = false,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
 
 drop policy if exists "Users read their own FormSaathi documents" on storage.objects;
 create policy "Users read their own FormSaathi documents"
