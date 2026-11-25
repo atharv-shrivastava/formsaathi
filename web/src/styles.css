@@ -186,7 +186,11 @@ code { padding: 2px 5px; border-radius: 5px; background: #f0f3f8; color: #3c5279
 
 /* Documents and profile */
 .upload-card { display: flex; align-items: center; justify-content: space-between; gap: 22px; padding: 19px 21px; }
+.upload-main { display: grid; min-width: 0; flex: 1; gap: 12px; }
 .upload-copy { display: flex; align-items: center; gap: 13px; }
+.cloud-consent { display: flex; align-items: flex-start; gap: 8px; max-width: 560px; color: #8b97a8; font-size: 9px; line-height: 1.5; cursor: pointer; }
+.cloud-consent input { width: 14px; height: 14px; flex: 0 0 14px; margin: 0; accent-color: #446bd8; }
+.upload-controls .button.disabled { background: #9aa9c8; box-shadow: none; cursor: not-allowed; }
 .upload-symbol { display: grid; place-items: center; width: 40px; height: 40px; border: 1px dashed #b8c7ec; border-radius: 11px; color: #5775c2; background: #f1f5ff; font-size: 20px; }
 .upload-copy p, .application-form p { margin: 5px 0 0; color: #99a4b3; font-size: 10px; }
 .upload-controls { display: flex; align-items: flex-end; gap: 11px; }
@@ -315,6 +319,7 @@ code { padding: 2px 5px; border-radius: 5px; background: #f0f3f8; color: #3c5279
   .stat-top { font-size: 9px; }
   .section-grid, .privacy-grid { grid-template-columns: 1fr; }
   .upload-card { align-items: flex-start; flex-direction: column; }
+  .upload-main { width: 100%; }
   .upload-controls { width: 100%; }
   .category-picker { flex: 1; }
   .category-picker select { width: 100%; min-width: 0; }
