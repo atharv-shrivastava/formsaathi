@@ -1,12 +1,37 @@
 # FormSaathi architecture
 
-## Design goal
+## Product boundary
 
-The browser extension and document-processing service are independent. The extension owns page inspection, user interaction, IndexedDB document storage and visual guidance. The loopback service owns OCR, image preparation and optional external-AI orchestration.
+FormSaathi has two interfaces:
 
-## Runtime flow
+- `web/` is the account and document-management workspace. It is the source of truth for account-owned documents, OCR candidate facts and user-reviewed profile facts.
+- `extension/` inspects supported browser forms, guides the user and performs field-level autofill after explicit approval. It is not yet connected to web accounts; the pairing and data API are the next milestone.
 
-1. User adds PDF/image documents and chooses or confirms a category. Filename keywords can suggest a category. The original Blob is saved to extension IndexedDB. No OCR or network request runs on upload.
+The local `server/` currently provides OCR, image preparation and optional AI field mapping for development. It is not a public production API.
+
+## Web app data flow
+
+1. Supabase Auth creates the user session.
+2. The browser uploads a selected PDF/image to a private Storage bucket under a folder named with the authenticated user's UUID.
+3. The browser inserts document metadata into `public.documents`; RLS requires `user_id = auth.uid()`.
+4. OCR runs only after the user selects Run OCR. The web app downloads that one file from private Storage and sends it to the local OCR service.
+5. Candidate values are saved in `public.extracted_facts` with status `pending`.
+6. The user reviews each candidate and explicitly approves it. Approved values are upserted into `public.profile_facts`.
+7. The extension integration will retrieve only requested verified facts under the same user's RLS-protected session.
+
+## Supabase data model
+
+- `profiles`: user display name and language preference.
+- `documents`: owner, file name, category, MIME type, byte size, private storage path and processing status.
+- `extracted_facts`: OCR candidate facts, evidence, confidence and review status.
+- `profile_facts`: one user-reviewed value per fact key, with source document and confidence.
+- `applications`: a simple personal progress tracker.
+
+The migration in `supabase/migrations` enables RLS on every user-owned table and creates a private `formsaathi-documents` bucket with owner-folder policies. The web app uses only the Supabase publishable key. A service-role/secret key must never be exposed in browser code.
+
+## Current extension architecture
+
+1. User adds PDF/image documents and chooses or confirms a category. The original Blob is saved to extension IndexedDB. No OCR or network request runs on upload.
 2. User clicks Scan current page. The content script inspects visible input, textarea and select controls and returns labels, types, required state and dropdown options. It does not read existing field values.
 3. The extension maps field labels to known information keys and derives required document categories.
 4. Only documents in those categories are selected from IndexedDB and sent one at a time to the loopback OCR API. Unrelated categories are not sent.
@@ -14,37 +39,17 @@ The browser extension and document-processing service are independent. The exten
 6. Deterministic aliases map candidate facts to portal fields. Optional Gemini mapping is separately gated by an explicit confirmation. Original files are not sent to Gemini.
 7. The applicant edits/reviews each proposed value, highlights the target field and clicks Approve & fill this field.
 8. The content script uses the native DOM setter and dispatches input/change events. It never clicks a submit button.
-9. For image upload constraints, the user requests a JPEG copy with max KB and max dimensions. Sharp processes it in memory and returns it for local download. The applicant attaches it manually.
+9. File inputs are detected but must be attached manually.
 
-## Modules
+## Next integration milestone
 
-- extension/entrypoints/content.ts: DOM discovery, element highlighting and single-field fill.
-- extension/entrypoints/sidepanel: document vault and review interface.
-- extension/lib/db.ts: IndexedDB file storage.
-- extension/lib/mapping.ts: field aliases, filename categorization and category-based retrieval.
-- server/src/ocr.js: image/PDF extraction and OCR.
-- server/src/facts.js: labelled-line candidate extraction.
-- server/src/prepare.js: JPEG resize/compression.
-- server/src/index.js: local API and opt-in Gemini adapter.
-
-## Normalized field model
-
-Each field descriptor includes a transient ID, visible label, tag name, input type, required flag, placeholder, name and select options. Current field values are deliberately not collected.
+Implement a deliberate extension-account pairing flow using a browser-supported OAuth/PKCE or one-time pairing flow. The extension must store credentials in extension-owned storage, support revocation, and request only verified profile facts required by the current form. Do not share the website's refresh token with page scripts or put tokens in URLs. See `docs/EXTENSION_INTEGRATION.md`.
 
 ## Safety boundaries
 
-- The AI endpoint returns suggestions only. It cannot invoke browser actions.
-- If multiple selected documents provide different values for the same canonical field, the UI flags a conflict instead of choosing the highest OCR score. Optional AI mapping is prevented from resolving that conflict; the applicant must decide.
-- File inputs are detected but cannot be autofilled by the extension.
+- AI and OCR return suggestions only; they cannot invoke browser actions.
+- Candidate values remain pending until user approval.
+- Conflicting source values must be shown for human resolution.
 - No CAPTCHA solving, anti-bot bypass, credential handling or final submission automation.
 - If a target is missing or ambiguous, the user must rescan or fill manually.
-- Cross-origin frames and inaccessible custom controls may not be visible to this content script.
-- Visual overlays use viewport measurements and may need recalibration on dynamic pages.
-
-## Planned next engineering steps
-
-- Add an OCR document classification stage and richer per-file metadata (e.g. Class 10 marksheet vs Class 12 marksheet).
-- Add source-page/region provenance and discrepancy comparison across documents.
-- Add VLM screenshot fallback with user-confirmed target selection.
-- Add a local API pairing token and encrypted vault before real personal data is considered.
-- Add regional language OCR and test it against a labelled evaluation corpus.
+- Cross-origin frames and inaccessible custom controls may not be visible to the current content script.
