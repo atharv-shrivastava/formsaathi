@@ -14,7 +14,7 @@ The `server/` provides the OCR, image-preparation and optional AI-mapping API. H
 1. Supabase Auth creates the user session.
 2. The browser uploads a selected PDF/image to a private Storage bucket under a folder named with the authenticated user's UUID.
 3. The browser inserts document metadata into `public.documents`; RLS requires `user_id = auth.uid()`.
-4. OCR runs only after the user selects Run OCR. The web app downloads that one file from private Storage and sends it over HTTPS to the hosted OCR API with the current user's Supabase access token.
+4. OCR runs only after the user selects Run OCR. The web app downloads that one file from private Storage and sends it over HTTPS to the hosted OCR API with the current user's Supabase access token. The service validates the PDF/image signature, enforces a 10 MB limit and per-user rate limits, and processes the upload in memory without writing the document to its service filesystem.
 5. Candidate values are saved in `public.extracted_facts` with status `pending`.
 6. The user reviews each candidate and explicitly approves it. Approved values are upserted into `public.profile_facts`.
 7. The extension integration will retrieve only requested verified facts under the same user's RLS-protected session.
