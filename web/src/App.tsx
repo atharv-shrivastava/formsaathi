@@ -731,7 +731,7 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onReje
         {pendingFacts.length === 0 ? <EmptyState title="You're all caught up" text="New OCR results will appear here for your review." /> : (
           <div className="candidate-list">{pendingFacts.map((fact) => (
             <article className="candidate-row" key={fact.id}>
-              <div className="candidate-main"><div className="candidate-label">{displayFactKey(fact.fact_key)}</div><strong>{fact.fact_value}</strong><small>{docName(fact.document_id)}{fact.confidence !== null ? " · OCR confidence " + Math.round(fact.confidence * 100) + "%" : ""}</small>{fact.evidence && <p className="evidence">“{fact.evidence}”</p>}</div>
+              <div className="candidate-main"><div className="candidate-label">{displayFactKey(fact.fact_key)}</div><strong>{fact.fact_value}</strong><small>{docName(fact.document_id)}{fact.confidence !== null ? " · extraction heuristic " + Math.round(fact.confidence * 100) + "%" : ""}</small>{fact.evidence && <p className="evidence">“{fact.evidence}”</p>}</div>
               <div className="candidate-actions"><button className="button approve-button" disabled={busy} onClick={() => onApprove(fact)}>✓ Use this value</button><button className="text-button reject-button" disabled={busy} onClick={() => onReject(fact)}>Dismiss</button></div>
             </article>
           ))}</div>
