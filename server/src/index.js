@@ -205,6 +205,7 @@ app.post(
     try {
       const result = await processDocument(request.file);
       response.json({
+        text: result.text,
         facts: result.facts,
         note: "OCR output is unverified. Check every value against the original document."
       });
