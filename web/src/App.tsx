@@ -808,18 +808,20 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onReje
     { key: "father_name", label: "Father's name", type: "text" },
     { key: "mother_name", label: "Mother's name", type: "text" },
     { key: "guardian_name", label: "Guardian's name", type: "text" },
-    { key: "date_of_birth", label: "Date of birth", type: "date" },
+    { key: "date_of_birth", label: "Date of birth", type: "text" },
     { key: "mobile_number", label: "Mobile number", type: "tel" },
     { key: "email", label: "Email address", type: "email" },
     { key: "address", label: "Residential address", type: "text" },
     { key: "postal_code", label: "PIN / postal code", type: "text" },
+    { key: "district", label: "District", type: "text" },
+    { key: "state", label: "State", type: "text" },
     { key: "gender", label: "Gender", type: "text" },
     { key: "annual_income", label: "Annual family income", type: "text" },
     { key: "percentage", label: "Marks percentage", type: "text" },
     { key: "caste_category", label: "Category", type: "text" },
     { key: "bank_account_number", label: "Bank account number", type: "text" },
     { key: "ifsc_code", label: "IFSC code", type: "text" }
-  ];
+  ] as const;
   function valueFor(key: string) {
     return manualValues[key] ?? verifiedFacts.find((fact) => fact.fact_key === key)?.fact_value ?? "";
   }
@@ -860,7 +862,7 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onReje
       <div className="profile-intro"><div><div className="profile-shield">◈</div><div><strong>Your information profile</strong><p>Only values you approve are marked as reviewed and made available for future form matching.</p></div></div><span className="reviewed-count">{verifiedFacts.length} reviewed</span></div>
       <section className="surface-card profile-section">
         <div className="section-head"><div><p className="eyebrow">SAVED INFORMATION</p><h3>Reviewed profile</h3></div><span className="soft-badge">{verifiedFacts.length} fields</span></div>
-        {verifiedFacts.length === 0 ? <EmptyState title="Nothing verified yet" text="Run OCR on a document, then approve the values you want to save here." /> : (
+        {verifiedFacts.length === 0 ? <EmptyState title="Nothing verified yet" text="Enter information manually above or run OCR on a document and approve the values you want to save here." /> : (
           <div className="fact-grid">{verifiedFacts.map((fact) => (
             <div className="fact-card" key={fact.id}><div className="fact-label">{displayFactKey(fact.fact_key)} <span className="verified-dot">✓ Reviewed</span></div><strong>{fact.fact_value}</strong><small>Source: {fact.source_document_id ? docName(fact.source_document_id) : "Manually added"}</small></div>
           ))}</div>
