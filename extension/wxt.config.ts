@@ -7,7 +7,11 @@ export default defineConfig({
     description: "Document-aware, human-reviewed government form guidance.",
     version: "0.1.0",
     permissions: ["storage", "activeTab", "sidePanel"],
-    host_permissions: ["http://127.0.0.1:8787/*"],
+    host_permissions: [
+      "http://127.0.0.1:8787/*",
+      "https://jsurlqzbpmianyvmteto.supabase.co/*",
+      "https://formsaathi-web.vercel.app/*"
+    ],
     side_panel: {
       default_path: "sidepanel.html"
     },

@@ -10,7 +10,7 @@ import type {
   UserDocument
 } from "./lib/types";
 
-type Page = "overview" | "documents" | "profile" | "applications" | "privacy";
+type Page = "overview" | "documents" | "profile" | "applications" | "extension" | "privacy";
 type AuthMode = "signin" | "signup";
 
 const categoryOptions: Array<{ value: DocumentCategory; label: string }> = [
@@ -39,6 +39,7 @@ const pageTitles: Record<Page, { title: string; subtitle: string }> = {
   documents: { title: "My documents", subtitle: "Upload, organise and process the documents you choose." },
   profile: { title: "Information profile", subtitle: "Review extracted information before it is saved as verified." },
   applications: { title: "Applications", subtitle: "Keep track of the forms you are working on." },
+  extension: { title: "Browser extension", subtitle: "Install FormSaathi in Chrome and connect it to your reviewed profile." },
   privacy: { title: "Privacy centre", subtitle: "See how your information is stored and control your data." }
 };
 
@@ -540,6 +541,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
     { id: "documents", label: "My documents", icon: "▤" },
     { id: "profile", label: "Information profile", icon: "◈" },
     { id: "applications", label: "Applications", icon: "▣" },
+    { id: "extension", label: "Browser extension", icon: "⌘" },
     { id: "privacy", label: "Privacy centre", icon: "◉" }
   ];
 
@@ -631,6 +633,9 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
                   onAdd={addApplication}
                   onStatusChange={updateApplicationStatus}
                 />
+              )}
+              {page === "extension" && (
+                <ExtensionPage userEmail={user.email || ""} verifiedFactCount={verifiedFacts.length} />
               )}
               {page === "privacy" && (
                 <PrivacyPage
@@ -859,7 +864,7 @@ function PrivacyPage({ userEmail, documentCount, factCount, onClear, busy }: {
       <div className="privacy-grid">
         <section className="surface-card privacy-card"><div className="privacy-card-icon">▣</div><h3>Private document storage</h3><p>Files are stored in a non-public Supabase Storage bucket. Row-level security policies restrict access to the authenticated owner.</p><span className="privacy-status">Configured in database migration</span></section>
         <section className="surface-card privacy-card"><div className="privacy-card-icon">⌁</div><h3>On-demand OCR</h3><p>Uploading a document does not automatically run OCR. When you choose Run OCR, that file is sent over HTTPS to our hosted OCR processor for in-memory processing. Candidate values need your approval.</p><span className="privacy-status">User initiated</span></section>
-        <section className="surface-card privacy-card"><div className="privacy-card-icon">◈</div><h3>Limited profile data</h3><p>The extension integration is designed to retrieve only reviewed fields needed for the current form, not your entire document vault.</p><span className="privacy-status">Extension pairing is next</span></section>
+        <section className="surface-card privacy-card"><div className="privacy-card-icon">◈</div><h3>Limited profile data</h3><p>The extension integration is designed to retrieve only reviewed fields needed for the current form, not your entire document vault.</p><span className="privacy-status">Extension reads reviewed profile facts only</span></section>
         <section className="surface-card privacy-card"><div className="privacy-card-icon">↺</div><h3>Delete your data</h3><p>Remove uploaded files, extracted candidates, reviewed profile values and application tracker entries while keeping your login account.</p><span className="privacy-status">{documentCount} documents · {factCount} reviewed fields</span></section>
       </div>
       <section className="surface-card data-controls"><div><p className="eyebrow">ACCOUNT DATA</p><h3>{userEmail}</h3><p>Clear your FormSaathi content from the active database and private storage. This does not delete your Supabase login account or copies retained in backups according to your provider's retention settings.</p></div><button className="button danger-button" onClick={onClear} disabled={busy}>{busy ? "Clearing…" : "Delete my FormSaathi data"}</button></section>
@@ -877,3 +882,44 @@ function EmptyState({ title, text }: { title: string; text: string }) {
 }
 
 export default App;
+
+
+const extensionPackageUrl = "https://github.com/atharv-shrivastava/formsaathi/releases/download/extension-v0.1.0/FormSaathi-Chrome-Extension.zip";
+
+function ExtensionPage({ userEmail, verifiedFactCount }: { userEmail: string; verifiedFactCount: number }) {
+  return (
+    <div className="page-content">
+      <section className="surface-card extension-hero">
+        <div className="extension-mark">FS</div>
+        <div className="extension-hero-copy">
+          <p className="eyebrow">FORMsaathi FOR CHROME</p>
+          <h2>Take your reviewed profile to the form.</h2>
+          <p>FormSaathi can read the fields on the active page, match them against your approved information profile and let you review each suggested value before filling.</p>
+          <a className="button primary extension-download" href={extensionPackageUrl}>Download Chrome extension <span>↓</span></a>
+          <a className="text-button extension-release-link" href="https://github.com/atharv-shrivastava/formsaathi/releases" target="_blank" rel="noreferrer">View release notes ↗</a>
+        </div>
+      </section>
+
+      <section className="surface-card extension-steps-card">
+        <div className="section-head"><div><p className="eyebrow">ONE-TIME SETUP</p><h3>Install the development build</h3></div><span className="soft-badge">Chrome / Chromium</span></div>
+        <ol className="extension-steps">
+          <li><strong>Download and extract</strong><span>Download the ZIP above and extract it to a folder on your computer.</span></li>
+          <li><strong>Open Chrome extensions</strong><span>Enter <code>chrome://extensions</code> in the browser address bar.</span></li>
+          <li><strong>Enable Developer mode</strong><span>Turn on Developer mode using the switch near the top-right corner.</span></li>
+          <li><strong>Load the extension</strong><span>Click Load unpacked and select the extracted folder that contains <code>manifest.json</code>.</span></li>
+          <li><strong>Open FormSaathi</strong><span>Pin the extension if desired, then open its side panel from the Chrome toolbar.</span></li>
+        </ol>
+      </section>
+
+      <section className="surface-card extension-connect-card">
+        <p className="eyebrow">YOUR FORMsaathi ACCOUNT</p>
+        <h3>Connect using the same account</h3>
+        <p>Sign in inside the extension with the same email address and password you use on this website. The extension keeps its own protected browser-extension session; it does not copy credentials from the website.</p>
+        <div className="extension-account-summary"><div><span>Website account</span><strong>{userEmail}</strong></div><div><span>Reviewed profile fields</span><strong>{verifiedFactCount}</strong></div></div>
+        <p className="inline-note"><span>ⓘ</span> When a form is scanned, the extension requests only verified profile fields that match detected form labels. Database row-level security determines which user's values can be returned.</p>
+      </section>
+
+      <div className="security-callout"><strong>Distribution note:</strong> This is a development ZIP for manual installation. It is not yet published in the Chrome Web Store, so Chrome requires Developer mode and Load unpacked. The extension only fills fields after you approve them; it never submits the form.</div>
+    </div>
+  );
+}

@@ -62,3 +62,14 @@ jobs:
 
       - name: Build Chrome extension
         run: pnpm build:extension
+
+      - name: Package Chrome extension
+        run: pnpm --filter @formsaathi/extension zip
+
+      - name: Upload extension package
+        uses: actions/upload-artifact@v4
+        with:
+          name: formsaathi-chrome-extension
+          path: extension/.output/*.zip
+          if-no-files-found: error
+          retention-days: 14

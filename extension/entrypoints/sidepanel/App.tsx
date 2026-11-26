@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
+import { disconnectExtensionAccount, getExtensionAccount, getVerifiedProfileFacts, signInExtensionAccount, type ExtensionAccount } from "../../lib/account";
 import { checkApi, extractDocument, prepareImage as requestImagePreparation, requestAiMappings } from "../../lib/api";
 import { deleteDocument, listDocuments, saveDocument } from "../../lib/db";
 import { canonicalFieldKey, categoryForKey, createReviewRows, inferDocumentCategory, retrieveRelevantDocuments } from "../../lib/mapping";
@@ -19,6 +21,12 @@ const categories: Array<{ value: DocumentCategory; label: string }> = [
 const emptyScan: ScanResult = { title: "", url: "", fields: [] };
 
 export default function App() {
+  const [account, setAccount] = useState<ExtensionAccount | null>(null);
+  const [accountLoading, setAccountLoading] = useState(true);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState("");
   const [documents, setDocuments] = useState<StoredDocument[]>([]);
   const [category, setCategory] = useState<DocumentCategory>("identity");
   const [scan, setScan] = useState<ScanResult>(emptyScan);
@@ -36,10 +44,45 @@ export default function App() {
 
   useEffect(() => {
     void reloadDocuments();
+    void getExtensionAccount()
+      .then(setAccount)
+      .catch((error) => setAuthError(error instanceof Error ? error.message : "Could not restore account connection."))
+      .finally(() => setAccountLoading(false));
     void checkApi().then(setApiReady);
     const timer = window.setInterval(() => void checkApi().then(setApiReady), 8000);
     return () => window.clearInterval(timer);
   }, []);
+
+  async function handleConnect(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthBusy(true);
+    setAuthError("");
+    try {
+      const connected = await signInExtensionAccount(authEmail, authPassword);
+      setAccount(connected);
+      setAuthPassword("");
+      setStatus("Connected to your FormSaathi account. Reviewed profile facts are ready for matching.");
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Could not connect your FormSaathi account.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    setAuthBusy(true);
+    setAuthError("");
+    try {
+      await disconnectExtensionAccount();
+      setAccount(null);
+      setRows([]);
+      setStatus("FormSaathi account disconnected from this extension.");
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Could not disconnect the account.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
 
   const groupedCount = useMemo(() => categories.map((item) => ({
     ...item,
@@ -135,30 +178,61 @@ export default function App() {
       setScan(nextScan);
 
       const relevantDocuments = retrieveRelevantDocuments(nextScan.fields, documents);
+      const fieldKeys = Array.from(new Set(
+        nextScan.fields.map(canonicalFieldKey).filter((key): key is string => Boolean(key))
+      ));
       const relevantCategories = Array.from(new Set(
         nextScan.fields.map(canonicalFieldKey).map(categoryForKey).filter(Boolean)
       ));
-      if (relevantDocuments.length === 0) {
-        setRows(createReviewRows(nextScan.fields, []));
-        setStatus("Found " + nextScan.fields.length + " visible controls. No uploaded document matched the detected requirements. Add the relevant document category.");
-        return;
+
+      const facts: Array<CandidateFact & { sourceId: string; sourceName: string }> = [];
+      let cloudFactCount = 0;
+      if (account && fieldKeys.length > 0) {
+        const cloudFacts = await getVerifiedProfileFacts(fieldKeys);
+        cloudFactCount = cloudFacts.length;
+        for (const fact of cloudFacts) {
+          facts.push({
+            key: fact.fact_key,
+            value: fact.fact_value,
+            confidence: fact.confidence ?? 0.92,
+            evidence: "Reviewed and approved in your FormSaathi information profile.",
+            sourceId: fact.id,
+            sourceName: "FormSaathi verified profile"
+          });
+        }
       }
 
-      if (!apiReady) throw new Error("The local OCR service is offline. Start it with npm run dev:server.");
-      setStatus("Retrieving " + relevantDocuments.length + " relevant document(s) from: " + relevantCategories.join(", ") + ". Unrelated documents are not sent for OCR.");
-      const facts: Array<CandidateFact & { sourceId: string; sourceName: string }> = [];
-      for (const document of relevantDocuments) {
-        let documentFacts = document.cachedFacts || [];
-        if (!document.cachedAt) {
-          const extracted = await extractDocument(document);
-          documentFacts = extracted.facts;
-          await saveDocument({ ...document, cachedText: extracted.text, cachedFacts: documentFacts, cachedAt: Date.now() });
+      let localDocumentCount = 0;
+      if (relevantDocuments.length > 0 && apiReady) {
+        setStatus("Loading approved cloud profile values and processing " + relevantDocuments.length + " relevant local document(s): " + relevantCategories.join(", ") + ".");
+        for (const document of relevantDocuments) {
+          let documentFacts = document.cachedFacts || [];
+          if (!document.cachedAt) {
+            const extracted = await extractDocument(document);
+            documentFacts = extracted.facts;
+            await saveDocument({ ...document, cachedText: extracted.text, cachedFacts: documentFacts, cachedAt: Date.now() });
+          }
+          for (const fact of documentFacts) facts.push({ ...fact, sourceId: document.id, sourceName: document.name });
         }
-        for (const fact of documentFacts) facts.push({ ...fact, sourceId: document.id, sourceName: document.name });
+        localDocumentCount = relevantDocuments.length;
+        setDocuments(await listDocuments());
       }
-      setDocuments(await listDocuments());
+
       setRows(createReviewRows(nextScan.fields, facts));
-      setStatus("Detected " + nextScan.fields.length + " controls. OCR ran only on " + relevantDocuments.length + " document(s) in the required categories. Review every suggested value.");
+      if (facts.length === 0) {
+        const accountHint = account ? " No reviewed cloud profile values matched these fields." : " Connect your FormSaathi account to use reviewed profile values from the website.";
+        const documentHint = relevantDocuments.length > 0 && !apiReady
+          ? " The local OCR service is offline, so browser-local documents were not processed."
+          : " Add and review the relevant profile information on the FormSaathi website.";
+        setStatus("Found " + nextScan.fields.length + " visible controls." + accountHint + documentHint);
+      } else {
+        const cloudSummary = cloudFactCount + " approved cloud profile value(s)";
+        const localSummary = localDocumentCount + " browser-local document(s) processed";
+        const localOffline = relevantDocuments.length > 0 && !apiReady
+          ? " Local OCR is offline; browser-local documents were skipped."
+          : "";
+        setStatus("Detected " + nextScan.fields.length + " controls and matched " + cloudSummary + " plus " + localSummary + "." + localOffline + " Review every suggested value before filling.");
+      }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not scan this page.");
     } finally {
@@ -261,8 +335,27 @@ export default function App() {
         </div>
       </header>
 
+      <section className="account-card" aria-label="FormSaathi account connection">
+        {accountLoading ? <p className="account-muted">Checking your FormSaathi account…</p> : account ? (
+          <div className="account-connected">
+            <div><strong>Account connected</strong><small>{account.email || "Signed in"}</small><small>Approved profile facts are available for form matching.</small></div>
+            <button type="button" className="account-disconnect" disabled={authBusy} onClick={() => void handleDisconnect()}>{authBusy ? "Please wait…" : "Disconnect"}</button>
+          </div>
+        ) : (
+          <form className="account-form" onSubmit={(event) => void handleConnect(event)}>
+            <div><strong>Connect your FormSaathi account</strong><small>Use the same email and password as the web app.</small></div>
+            <input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="Email address" autoComplete="username" required />
+            <input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder="Password" autoComplete="current-password" required />
+            {authError && <p className="account-error" role="alert">{authError}</p>}
+            <button className="primary-button full" type="submit" disabled={authBusy}>{authBusy ? "Connecting…" : "Connect account"}</button>
+            <a className="account-link" href="https://formsaathi-web.vercel.app" target="_blank" rel="noreferrer">Open FormSaathi website ↗</a>
+          </form>
+        )}
+        {account && authError && <p className="account-error" role="alert">{authError}</p>}
+      </section>
+
       <div className="privacy-note">
-        Files stay in this browser until a relevant form requires OCR. Only matching document categories are processed.
+        Your approved profile facts sync from FormSaathi. Documents added directly to this extension remain in this browser and are processed only when you scan a form.
       </div>
 
       <nav className="tabs">

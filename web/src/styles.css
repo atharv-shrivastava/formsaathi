@@ -357,3 +357,26 @@ code { padding: 2px 5px; border-radius: 5px; background: #f0f3f8; color: #3c5279
   .extension-strip { align-items: flex-start; }
   .coming-pill { display: none; }
 }
+
+
+.extension-hero{display:grid;grid-template-columns:74px minmax(0,1fr);gap:22px;padding:26px;align-items:start}
+.extension-mark{display:grid;place-items:center;width:64px;height:64px;border-radius:18px;background:#eaf0ff;color:#3157a5;font-size:19px;font-weight:900;letter-spacing:-1px}
+.extension-hero-copy h2{margin:5px 0 8px;color:#26344c;font:800 22px Manrope,sans-serif;letter-spacing:-.6px}
+.extension-hero-copy>p:not(.eyebrow){max-width:680px;margin:0;color:#6d7b90;font-size:12px;line-height:1.7}
+.extension-download{display:inline-flex;margin-top:17px;text-decoration:none}
+.extension-release-link{display:inline-block;margin-left:15px}
+.extension-steps-card,.extension-connect-card{padding:22px}
+.extension-steps{display:grid;gap:14px;margin:18px 0 0;padding-left:22px;color:#526176}
+.extension-steps li{padding-left:4px}
+.extension-steps li::marker{color:#4166b7;font-weight:800}
+.extension-steps strong,.extension-steps span{display:block}
+.extension-steps strong{color:#2b3950;font-size:12px}
+.extension-steps span{margin-top:4px;color:#728096;font-size:11px;line-height:1.6}
+.extension-steps code{padding:2px 5px;border-radius:5px;background:#f0f3f8;color:#40516b}
+.extension-connect-card h3{margin:0;color:#26344c;font:800 16px Manrope,sans-serif}
+.extension-connect-card>p:not(.eyebrow):not(.inline-note){max-width:720px;color:#718096;font-size:11px;line-height:1.7}
+.extension-account-summary{display:flex;flex-wrap:wrap;gap:12px;margin:17px 0}
+.extension-account-summary>div{display:flex;min-width:200px;flex-direction:column;gap:5px;padding:12px 14px;border:1px solid #e8edf4;border-radius:9px;background:#f9fbfe}
+.extension-account-summary span{color:#8290a3;font-size:10px}
+.extension-account-summary strong{color:#2d3b53;font-size:12px;overflow-wrap:anywhere}
+@media(max-width:640px){.extension-hero{grid-template-columns:1fr;padding:20px}.extension-hero-copy h2{font-size:19px}.extension-release-link{display:block;margin:10px 0 0}.extension-account-summary>div{min-width:100%}}

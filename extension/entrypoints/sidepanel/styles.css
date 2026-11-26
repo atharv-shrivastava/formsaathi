@@ -3,3 +3,17 @@
 .prepare-settings{margin:12px 0 15px;padding:11px;background:#fff;border:1px solid #e1e7f0;border-radius:10px}.prepare-heading{font-size:11px;font-weight:800;color:#314966;margin-bottom:9px}.prepare-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.prepare-grid label{display:flex;flex-direction:column;gap:5px;font-size:9px;color:#65738a;font-weight:700}.prepare-grid input{width:100%;min-width:0;padding:7px;border:1px solid #d4dce8;border-radius:7px;font:inherit;font-size:11px;color:#24334a}.prepare-settings p{margin:8px 0 0;font-size:9px;line-height:1.4;color:#7b8798}.document-category{width:100%;max-width:180px;margin-top:4px;padding:4px 6px;border:1px solid #dce3ed;border-radius:6px;background:#f9fbfd;font-size:10px;color:#51627a}.prepare-button{margin:5px 0 0!important;padding:0!important}
 
 .status-tag.conflict{background:#fee8e7;color:#a12c2a}.conflict-evidence{background:#fff2f0;color:#9b312c;border:1px solid #f4c6c1}
+
+
+.account-card{margin:0 0 13px;padding:11px;background:#fff;border:1px solid #dfe7f1;border-radius:10px}
+.account-form{display:grid;gap:8px}
+.account-form>div,.account-connected>div{display:flex;flex-direction:column;gap:3px}
+.account-form strong,.account-connected strong{font-size:11px;color:#263a56}
+.account-form small,.account-connected small,.account-muted{font-size:10px;color:#718096;line-height:1.4}
+.account-form input{width:100%;padding:9px 10px;border:1px solid #d4dce8;border-radius:7px;background:#fff;font:inherit;font-size:11px;color:#202c40}
+.account-form input:focus{outline:2px solid #d8e7ff;border-color:#4b83d5}
+.account-link{font-size:10px;color:#2864a7;text-align:center;text-decoration:none}
+.account-connected{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.account-disconnect{flex:0 0 auto;padding:7px 9px;border:1px solid #d9e1ec;border-radius:7px;background:#f7f9fc;color:#50617a;font-size:10px;font-weight:700;cursor:pointer}
+.account-disconnect:disabled{opacity:.55;cursor:wait}
+.account-error{margin:0;color:#a12c2a;font-size:10px;line-height:1.4}
