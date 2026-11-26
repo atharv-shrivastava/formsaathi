@@ -18,6 +18,7 @@ AI-assisted government form guidance and autofill. The product has two user-faci
 - Private document upload and category management (PDF, JPG, PNG and WebP; 10 MB per file).
 - On-demand OCR using RapidOCR through the authenticated Node API.
 - Candidate facts are saved as pending and must be individually reviewed before they enter the user's verified profile.
+- Paper-form camera/gallery scan: OCR reads printed labels, Gemini vision locates writable areas, and exact reviewed profile values are overlaid onto a new downloadable image.
 - Application progress tracker.
 - Privacy centre with data deletion for documents, extracted candidates, verified profile facts and application records.
 
@@ -25,7 +26,7 @@ AI-assisted government form guidance and autofill. The product has two user-faci
 
 Supabase is the account and data layer: Auth identifies the user, Postgres stores user-owned metadata and reviewed facts, and a private Storage bucket holds original files. Row Level Security (RLS) scopes every user-owned table and the Storage bucket to the authenticated user.
 
-The web app and extension use the same Supabase account. During a form scan, the extension sends only visible field descriptors (labels, names, placeholders, control types and dropdown choices) to the authenticated Node API. It does not send values already typed into the government form. The API validates the Supabase user, reads only that user's verified profile facts under Row Level Security, filters to facts plausibly relevant to the detected fields, and sends those facts plus field descriptors to Google Gemini only after explicit user consent. The model returns fact-key matches, not personal values; the backend validates each match and supplies the exact stored value. The extension presents suggestions for review and requires per-field approval before filling. OCR image processing continues through the private-token-protected RapidOCR service.
+The web app and extension use the same Supabase account. During a browser form scan, the extension sends only visible field descriptors (labels, names, placeholders, control types and dropdown choices) to the authenticated Node API. The web app also provides a mobile-friendly paper-form scanner with camera and gallery inputs. It does not send values already typed into the government form. The API validates the Supabase user, reads only that user's verified profile facts under Row Level Security, filters to facts plausibly relevant to the detected fields, and sends those facts plus field descriptors to Google Gemini only after explicit user consent. The model returns fact-key matches, not personal values; the backend validates each match and supplies the exact stored value. The extension presents suggestions for review and requires per-field approval before filling. For paper forms, the selected photo is processed in memory: RapidOCR reads labels, Gemini vision returns normalized coordinates for clearly empty writing areas, and Sharp overlays the exact verified values. The new JPEG is returned to the browser for review and download; the uploaded photo is not written to the FormSaathi document vault.
 
 ## Prerequisites
 
@@ -105,6 +106,7 @@ The extension does not automatically submit government applications. CAPTCHA, pa
 ## Current limitations
 
 - AI form analysis requires `GEMINI_API_KEY` on the hosted Node API. Each request requires explicit consent. Only relevant verified profile facts and detected field descriptions are sent to Gemini; the backend returns original stored values only after validating model-selected fact keys.
+- Paper-form image filling is AI-assisted, not guaranteed. Gemini's placement coordinates can be imperfect. The user must inspect every overlay and the original image remains unchanged. The route accepts JPG, PNG and WebP photos up to 10 MB.
 - The hosted RapidOCR processor uses a free CPU service and may take longer on its first request or after inactivity.
 - Candidate extraction still uses labelled-line heuristics; OCR text is not automatically treated as verified profile data.
 - The default RapidOCR model is English-oriented. Hindi/Devanagari recognition requires configuring and evaluating the corresponding RapidOCR model before relying on it.

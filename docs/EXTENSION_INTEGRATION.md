@@ -105,6 +105,44 @@ The hosted route returns a clear configuration error until the key is present. T
 - File upload inputs, passwords, checkboxes and radio buttons are not suggested for autofill.
 - The user checks every result and manually submits the official form.
 
+## Mobile paper-form photo scanner
+
+The signed-in web app includes a **Scan paper form** section. On a phone, the user can open the rear camera through an image file input with `capture="environment"`, or choose an existing JPG/PNG/WebP image from the gallery. The route accepts one image up to 10 MB.
+
+The user must explicitly consent before the image and relevant approved profile facts are sent to Google Gemini. The backend:
+
+1. Authenticates the Supabase user and reads only their `verified = true` profile facts under RLS.
+2. Runs RapidOCR against the photo to obtain printed label lines.
+3. Filters profile facts to those relevant to the OCR labels.
+4. Sends the photo, relevant facts and OCR label list to the configured Gemini vision model.
+5. Accepts only model placements that map to a verified fact and a matching OCR line, meet the confidence threshold, use bounded coordinates, and do not materially overlap another accepted placement.
+6. Uses Sharp to rotate the image according to EXIF orientation and draw exact database values into the model-selected blank regions.
+7. Returns a new JPEG as base64 plus the list of fields placed.
+
+The photo is held in backend memory for this request and is not uploaded to the FormSaathi document vault. Gemini receives the photo and relevant profile values, so the consent text must make that external processing clear. No image or PDF is submitted to a government portal. The user reviews and downloads the new image; the original local photo remains unchanged.
+
+### API contract
+
+`POST https://formsaathi-ocr-api.onrender.com/api/forms/fill-image`
+
+Use `multipart/form-data` with:
+- `file`: JPG, PNG or WebP image, maximum 10 MB.
+- `consent=true`: explicit opt-in.
+
+Header: `Authorization: Bearer <Supabase user access token>`
+
+Response includes:
+- `image`: base64-encoded filled JPEG.
+- `mimeType`, `width`, `height`.
+- `placements`: field label, fact key, exact value and model confidence.
+- `note`: review instructions.
+
+### Environment variables
+
+Set `GEMINI_API_KEY` on the Render `formsaathi-ocr-api` service. `GEMINI_VISION_MODEL` is optional and defaults to `GEMINI_MODEL`; the default model is `gemini-3.5-flash-lite`. Never put provider keys in the browser or extension.
+
+Paper-form placement is best-effort. Perspective distortion, handwriting, stamps, dense layouts, multi-column pages and faint labels can result in incorrect or missing placements. The user must verify the image before printing or submitting it.
+
 ## Separate local document vault
 
 The extension's IndexedDB document vault remains separate from the web app's private Supabase Storage bucket. Files uploaded directly into the extension remain in that browser. Existing extension OCR/image-preparation helpers still use the local development API at `127.0.0.1:8787`; the cloud AI form-analysis route is a separate hosted path.

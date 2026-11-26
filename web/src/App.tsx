@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { isSupabaseConfigured, ocrApiUrl, supabase } from "./lib/supabase";
@@ -10,7 +10,7 @@ import type {
   UserDocument
 } from "./lib/types";
 
-type Page = "overview" | "documents" | "profile" | "applications" | "extension" | "privacy";
+type Page = "overview" | "documents" | "profile" | "applications" | "paper-scan" | "extension" | "privacy";
 type AuthMode = "signin" | "signup";
 
 const categoryOptions: Array<{ value: DocumentCategory; label: string }> = [
@@ -39,6 +39,7 @@ const pageTitles: Record<Page, { title: string; subtitle: string }> = {
   documents: { title: "My documents", subtitle: "Upload, organise and process the documents you choose." },
   profile: { title: "Information profile", subtitle: "Review extracted information before it is saved as verified." },
   applications: { title: "Applications", subtitle: "Keep track of the forms you are working on." },
+  "paper-scan": { title: "Scan a paper form", subtitle: "Use your phone camera or gallery to create a filled copy of a paper form." },
   extension: { title: "Browser extension", subtitle: "Install FormSaathi in Chrome and connect it to your reviewed profile." },
   privacy: { title: "Privacy centre", subtitle: "See how your information is stored and control your data." }
 };
@@ -541,6 +542,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
     { id: "documents", label: "My documents", icon: "▤" },
     { id: "profile", label: "Information profile", icon: "◈" },
     { id: "applications", label: "Applications", icon: "▣" },
+    { id: "paper-scan", label: "Scan paper form", icon: "▧" },
     { id: "extension", label: "Browser extension", icon: "⌘" },
     { id: "privacy", label: "Privacy centre", icon: "◉" }
   ];
@@ -623,6 +625,9 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
                   busy={busy}
                 />
               )}
+              {page === "paper-scan" && (
+                <PaperFormPage verifiedFacts={verifiedFacts} />
+              )}
               {page === "applications" && (
                 <ApplicationsPage
                   applications={applications}
@@ -686,7 +691,7 @@ function OverviewPage({ name, documents, verifiedFacts, pendingFacts, applicatio
             <ChecklistItem complete={documents.length > 0} title="Add your documents" description="Upload a PDF or a clear image." onClick={() => onNavigate("documents")} />
             <ChecklistItem complete={extractedCount > 0} title="Extract information" description="Run OCR on a document you choose." onClick={() => onNavigate("documents")} />
             <ChecklistItem complete={verifiedFacts.length > 0} title="Review your profile" description="Approve the values you want to keep." onClick={() => onNavigate("profile")} />
-            <ChecklistItem complete={false} title="Connect your browser extension" description="Extension account pairing is the next integration step." onClick={() => onNavigate("privacy")} />
+            <ChecklistItem complete={false} title="Connect your browser extension" description="Use your FormSaathi account to scan supported online forms." onClick={() => onNavigate("extension")} />
           </div>
         </section>
         <section className="surface-card recent-card">
@@ -851,6 +856,202 @@ function ApplicationsPage({ applications, title, url, onTitleChange, onUrlChange
   );
 }
 
+
+interface PaperPlacement {
+  label: string;
+  factKey: string;
+  value: string;
+  confidence: number;
+}
+
+function PaperFormPage({ verifiedFacts }: { verifiedFacts: ProfileFact[] }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [originalUrl, setOriginalUrl] = useState("");
+  const [filledUrl, setFilledUrl] = useState("");
+  const [placements, setPlacements] = useState<PaperPlacement[]>([]);
+  const [consent, setConsent] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  const previewUrls = useRef<string[]>([]);
+  useEffect(() => () => {
+    previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    previewUrls.current = [];
+  }, []);
+
+  function chooseImage(event: ChangeEvent<HTMLInputElement>) {
+    const nextFile = event.target.files?.[0] || null;
+    event.target.value = "";
+    if (!nextFile) return;
+    setError("");
+    setMessage("");
+    setPlacements([]);
+    setConsent(false);
+    setFile(null);
+    if (originalUrl) {
+      URL.revokeObjectURL(originalUrl);
+      previewUrls.current = previewUrls.current.filter((url) => url !== originalUrl);
+      setOriginalUrl("");
+    }
+    setFilledUrl((current) => {
+      if (current) {
+        URL.revokeObjectURL(current);
+        previewUrls.current = previewUrls.current.filter((url) => url !== current);
+      }
+      return "";
+    });
+
+    if (!["image/jpeg", "image/png", "image/webp"].includes(nextFile.type)) {
+      setError("Choose a JPG, PNG or WebP photo. HEIC conversion is not enabled in this prototype.");
+      return;
+    }
+    if (nextFile.size > 10 * 1024 * 1024) {
+      setError("The photo must be 10 MB or smaller.");
+      return;
+    }
+    setFile(nextFile);
+    const nextUrl = URL.createObjectURL(nextFile);
+    previewUrls.current.push(nextUrl);
+    setOriginalUrl(nextUrl);
+  }
+
+  async function scanAndFill() {
+    if (!file) {
+      setError("Take a photo or choose an image first.");
+      return;
+    }
+    if (!consent) {
+      setError("Confirm the AI photo-processing notice before scanning.");
+      return;
+    }
+    if (verifiedFacts.length === 0) {
+      setError("Your information profile has no approved values yet. Review and approve profile facts first.");
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    setMessage("Reading printed labels and locating safe writing areas…");
+    setPlacements([]);
+    setFilledUrl((current) => {
+      if (current) {
+        URL.revokeObjectURL(current);
+        previewUrls.current = previewUrls.current.filter((url) => url !== current);
+      }
+      return "";
+    });
+
+    try {
+      const { data: sessionData, error: sessionError } = await supabase!.auth.getSession();
+      if (sessionError || !sessionData.session?.access_token) {
+        throw new Error("Your sign-in session has expired. Sign in again and retry.");
+      }
+
+      const form = new FormData();
+      form.append("file", file, file.name);
+      form.append("consent", "true");
+      const response = await fetch(ocrApiUrl + "/api/forms/fill-image", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + sessionData.session.access_token },
+        body: form
+      });
+      const payload = await response.json().catch(() => ({})) as {
+        image?: string;
+        mimeType?: string;
+        placements?: PaperPlacement[];
+        note?: string;
+        error?: string;
+      };
+      if (!response.ok) throw new Error(payload.error || "FormSaathi could not fill this paper form.");
+      if (!payload.image) throw new Error("The backend did not return a filled image.");
+
+      const binary = atob(payload.image);
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index);
+      }
+      const resultBlob = new Blob([bytes], { type: payload.mimeType || "image/jpeg" });
+      const resultUrl = URL.createObjectURL(resultBlob);
+      previewUrls.current.push(resultUrl);
+      setFilledUrl(resultUrl);
+      setPlacements(payload.placements || []);
+      setMessage(payload.note || "Filled image created. Verify every value before using it.");
+    } catch (reason) {
+      setError(messageFor(reason));
+      setMessage("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="page-content">
+      <section className="surface-card paper-scan-intro">
+        <div className="paper-scan-symbol">▧</div>
+        <div>
+          <p className="eyebrow">PAPER FORM ASSISTANT</p>
+          <h3>Photograph a paper form. Get a filled copy.</h3>
+          <p>Use your phone camera or select a photo from your gallery. FormSaathi reads the printed labels, matches them to your approved profile and places the values into clear writing spaces.</p>
+          <div className="paper-profile-count">{verifiedFacts.length} reviewed profile value(s) available</div>
+        </div>
+      </section>
+
+      <section className="surface-card paper-upload-card">
+        <div className="section-head"><div><p className="eyebrow">1 · ADD YOUR FORM</p><h3>Take a photo or choose an image</h3></div><span className="soft-badge">JPG · PNG · WebP</span></div>
+        <div className="paper-action-row">
+          <label className="button primary paper-choice">
+            <span>▣ Open camera</span>
+            <input type="file" accept="image/*" capture="environment" onChange={chooseImage} />
+          </label>
+          <label className="button paper-gallery paper-choice">
+            <span>▤ Choose from gallery</span>
+            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseImage} />
+          </label>
+        </div>
+        <p className="paper-guidance">Keep the entire page inside the frame. Photograph it from directly above, in good light, without shadows or blur.</p>
+        {originalUrl && (
+          <div className="paper-preview-block">
+            <div className="paper-preview-head"><strong>Original photo</strong><span>{file?.name}</span></div>
+            <img className="paper-preview-image" src={originalUrl} alt="Original paper form photo" />
+          </div>
+        )}
+        <label className="paper-consent">
+          <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
+          <span>I agree to send this photo and relevant approved profile values to Google Gemini through FormSaathi for form analysis. The processing route does not save the photo to my document vault.</span>
+        </label>
+        <button className="button primary paper-scan-button" disabled={!file || !consent || busy || verifiedFacts.length === 0} onClick={() => void scanAndFill()}>
+          {busy ? "Scanning and filling…" : "Scan and fill this image →"}
+        </button>
+        {error && <p className="paper-error" role="alert">{error}</p>}
+        {message && <p className="paper-message" role="status">{message}</p>}
+      </section>
+
+      {filledUrl && (
+        <section className="surface-card paper-result-card">
+          <div className="section-head"><div><p className="eyebrow">2 · REVIEW THE RESULT</p><h3>Your filled image</h3></div><span className="soft-badge">{placements.length} field(s) placed</span></div>
+          <img className="paper-result-image" src={filledUrl} alt="Filled paper form preview" />
+          <div className="paper-result-actions">
+            <a className="button primary" href={filledUrl} download={(file?.name || "form").replace(/\.[^.]+$/, "") + "-filled.jpg"}>Download filled image ↓</a>
+            <span>Original photo remains unchanged.</span>
+          </div>
+          <div className="paper-placement-list">
+            {placements.map((placement, index) => (
+              <div className="paper-placement-row" key={placement.factKey + "-" + index}>
+                <div><strong>{displayFactKey(placement.factKey)}</strong><small>{placement.label}</small></div>
+                <b>{placement.value}</b>
+                <span>{Math.round(placement.confidence * 100)}% model confidence</span>
+              </div>
+            ))}
+          </div>
+          <p className="inline-note"><span>ⓘ</span> Image placement is AI-assisted and can be imperfect. Check alignment, spelling and every value on the downloaded copy before printing, signing or submitting it.</p>
+        </section>
+      )}
+      <div className="security-callout"><strong>Important:</strong> The feature creates a new image, not an official digitally submitted form. It does not add signatures, certify documents or submit applications. Do not rely on automatic placement without reviewing the result.</div>
+    </div>
+  );
+}
+
 function PrivacyPage({ userEmail, documentCount, factCount, onClear, busy }: {
   userEmail: string;
   documentCount: number;
@@ -864,7 +1065,8 @@ function PrivacyPage({ userEmail, documentCount, factCount, onClear, busy }: {
       <div className="privacy-grid">
         <section className="surface-card privacy-card"><div className="privacy-card-icon">▣</div><h3>Private document storage</h3><p>Files are stored in a non-public Supabase Storage bucket. Row-level security policies restrict access to the authenticated owner.</p><span className="privacy-status">Configured in database migration</span></section>
         <section className="surface-card privacy-card"><div className="privacy-card-icon">⌁</div><h3>On-demand OCR</h3><p>Uploading a document does not automatically run OCR. When you choose Run OCR, that file is sent over HTTPS to our hosted OCR processor for in-memory processing. Candidate values need your approval.</p><span className="privacy-status">User initiated</span></section>
-        <section className="surface-card privacy-card"><div className="privacy-card-icon">◈</div><h3>Limited profile data</h3><p>The extension integration is designed to retrieve only reviewed fields needed for the current form, not your entire document vault.</p><span className="privacy-status">Extension reads reviewed profile facts only</span></section>
+        <section className="surface-card privacy-card"><div className="privacy-card-icon">◈</div><h3>Limited profile data</h3><p>The extension and paper-form scanner use only approved profile facts relevant to the current task, not the entire document vault.</p><span className="privacy-status">Reviewed profile facts only</span></section>
+        <section className="surface-card privacy-card"><div className="privacy-card-icon">▧</div><h3>Paper-form photo scan</h3><p>The selected photo is sent to the FormSaathi backend and Google Gemini after your consent. The processing route does not save the photo to your document vault.</p><span className="privacy-status">User initiated · in-memory API processing</span></section>
         <section className="surface-card privacy-card"><div className="privacy-card-icon">↺</div><h3>Delete your data</h3><p>Remove uploaded files, extracted candidates, reviewed profile values and application tracker entries while keeping your login account.</p><span className="privacy-status">{documentCount} documents · {factCount} reviewed fields</span></section>
       </div>
       <section className="surface-card data-controls"><div><p className="eyebrow">ACCOUNT DATA</p><h3>{userEmail}</h3><p>Clear your FormSaathi content from the active database and private storage. This does not delete your Supabase login account or copies retained in backups according to your provider's retention settings.</p></div><button className="button danger-button" onClick={onClear} disabled={busy}>{busy ? "Clearing…" : "Delete my FormSaathi data"}</button></section>

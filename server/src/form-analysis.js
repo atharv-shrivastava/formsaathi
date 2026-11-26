@@ -43,6 +43,7 @@ function matchesFactToField(field, fact) {
   const normalizedKey = normalize(key.replace(/_/g, " "));
   const aliases = factAliases[key] || [];
   if (!fieldText || !key) return false;
+  if (["applicant_name", "full_name"].includes(key) && fieldText === "name") return true;
   if (aliases.some((alias) => fieldText.includes(normalize(alias)))) return true;
   if (normalizedKey && (fieldText === normalizedKey || fieldText.includes(normalizedKey))) return true;
 

@@ -11,7 +11,7 @@
     "build:extension": "pnpm --filter @formsaathi/extension build",
     "dev:server": "pnpm --filter @formsaathi/server dev",
     "start:server": "pnpm --filter @formsaathi/server start",
-    "check:server": "node --check server/src/index.js && node --check server/src/form-analysis.js && node --check server/src/ocr.js && node --check server/src/facts.js && node --check server/src/prepare.js",
+    "check:server": "node --check server/src/index.js && node --check server/src/form-analysis.js && node --check server/src/paper-form.js && node --check server/src/ocr.js && node --check server/src/facts.js && node --check server/src/prepare.js",
     "test": "node --test server/test/*.test.js",
     "dev:web": "pnpm --filter @formsaathi/web dev",
     "build:web": "pnpm --filter @formsaathi/web build",
