@@ -423,3 +423,20 @@ code { padding: 2px 5px; border-radius: 5px; background: #f0f3f8; color: #3c5279
   .paper-placement-row{grid-template-columns:1fr;gap:6px;padding:13px 2px}
   .paper-placement-row>span{white-space:normal}
 }
+
+
+/* Manual profile entry */
+.manual-profile-card { padding: 22px; }
+.manual-profile-card .section-head { align-items: flex-start; }
+.manual-profile-card .section-head h3 { margin-bottom: 6px; }
+.manual-profile-card .section-head .muted { margin: 0; font-size: 11px; line-height: 1.5; }
+.manual-profile-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 15px 18px; margin-top: 20px; }
+.manual-profile-field { display: grid; gap: 7px; min-width: 0; color: #526078; font-size: 11px; font-weight: 700; }
+.manual-profile-control { display: flex; gap: 8px; min-width: 0; }
+.manual-profile-control input { width: 100%; min-width: 0; height: 42px; padding: 0 11px; border: 1px solid #e2e8f0; border-radius: 8px; color: var(--ink); background: #fbfcfe; font-size: 12px; font-weight: 500; }
+.manual-profile-control input:focus { border-color: #8ca5ee; outline: 3px solid rgba(68,107,216,.12); }
+.manual-profile-control .mini-button { flex: 0 0 auto; }
+@media (max-width: 720px) {
+  .manual-profile-grid { grid-template-columns: minmax(0,1fr); }
+  .manual-profile-card { padding: 17px; }
+}

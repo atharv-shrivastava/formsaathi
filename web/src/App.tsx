@@ -375,8 +375,11 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         headers: { Authorization: "Bearer " + sessionData.session.access_token },
         body: form
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "OCR service could not process this document.");
+      const payload = await response.json().catch(() => ({})) as {
+        facts?: Array<{ key: string; value: string; confidence?: number; evidence?: string }>;
+        error?: string;
+      };
+      if (!response.ok) throw new Error(payload.error || ("OCR service returned HTTP " + response.status + ". Check the backend route and Render logs."));
       const extracted = Array.isArray(payload.facts) ? payload.facts : [];
       const { error: clearError } = await client.from("extracted_facts").delete().eq("document_id", document.id);
       if (clearError) throw clearError;
@@ -437,6 +440,38 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
       await refreshData();
     } catch (reason) {
       setError(messageFor(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveManualFact(factKey: string, value: string) {
+    const cleanValue = value.trim().replace(/\\s{2,}/g, " ");
+    if (!cleanValue) throw new Error("Enter a value before saving.");
+    const current = profileFacts.find((item) => item.fact_key === factKey);
+    if (current && current.fact_value !== cleanValue) {
+      const confirmed = window.confirm(
+        "Replace the saved " + displayFactKey(factKey) + " value with the new value?"
+      );
+      if (!confirmed) return;
+    }
+    clearNotice();
+    setBusy(true);
+    try {
+      const { error: saveError } = await client.from("profile_facts").upsert({
+        user_id: user.id,
+        fact_key: factKey,
+        fact_value: cleanValue,
+        source_document_id: null,
+        confidence: 1,
+        verified: true
+      }, { onConflict: "user_id,fact_key" });
+      if (saveError) throw saveError;
+      setMessage(displayFactKey(factKey) + " saved to your verified profile.");
+      await refreshData();
+    } catch (reason) {
+      setError(messageFor(reason));
+      throw reason;
     } finally {
       setBusy(false);
     }
@@ -622,6 +657,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
                   onApprove={approveFact}
                   onReject={rejectFact}
                   onUpdate={updateFactValue}
+                  onManualSave={saveManualFact}
                   busy={busy}
                 />
               )}
@@ -755,24 +791,81 @@ function DocumentsPage({
   );
 }
 
-function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onReject, onUpdate, busy }: {
+function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onReject, onUpdate, onManualSave, busy }: {
   verifiedFacts: ProfileFact[];
   pendingFacts: ExtractedFact[];
   documents: UserDocument[];
   onApprove: (fact: ExtractedFact) => void;
   onReject: (fact: ExtractedFact) => void;
   onUpdate: (fact: ExtractedFact, value: string) => void;
+  onManualSave: (factKey: string, value: string) => Promise<void>;
   busy: boolean;
 }) {
   const [editingFactId, setEditingFactId] = useState<string | null>(null);
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
+  const [manualValues, setManualValues] = useState<Record<string, string>>({});
+  const [manualError, setManualError] = useState("");
   const docName = (id: string) => documents.find((document) => document.id === id)?.filename || "Source document";
+  const manualFields = [
+    { key: "applicant_name", label: "Applicant name", type: "text" },
+    { key: "father_name", label: "Father's name", type: "text" },
+    { key: "mother_name", label: "Mother's name", type: "text" },
+    { key: "guardian_name", label: "Guardian's name", type: "text" },
+    { key: "date_of_birth", label: "Date of birth", type: "text" },
+    { key: "mobile_number", label: "Mobile number", type: "tel" },
+    { key: "email", label: "Email address", type: "email" },
+    { key: "address", label: "Residential address", type: "text" },
+    { key: "postal_code", label: "PIN / postal code", type: "text" },
+    { key: "district", label: "District", type: "text" },
+    { key: "state", label: "State", type: "text" },
+    { key: "gender", label: "Gender", type: "text" },
+    { key: "annual_income", label: "Annual family income", type: "text" },
+    { key: "percentage", label: "Marks percentage", type: "text" },
+    { key: "caste_category", label: "Category", type: "text" },
+    { key: "bank_account_number", label: "Bank account number", type: "text" },
+    { key: "ifsc_code", label: "IFSC code", type: "text" }
+  ] as const;
+  function valueFor(key: string) {
+    return manualValues[key] ?? verifiedFacts.find((fact) => fact.fact_key === key)?.fact_value ?? "";
+  }
+  async function saveManual(key: string) {
+    setManualError("");
+    try {
+      await onManualSave(key, valueFor(key));
+    } catch (reason) {
+      setManualError(messageFor(reason));
+    }
+  }
   return (
     <div className="page-content">
+      <section className="surface-card manual-profile-card">
+        <div className="section-head"><div><p className="eyebrow">ENTER INFORMATION YOURSELF</p><h3>Manual profile entry</h3><p className="muted">No document upload or OCR required. Save each value to make it available to the extension.</p></div><span className="soft-badge">You control the data</span></div>
+        <div className="manual-profile-grid">
+          {manualFields.map((field) => (
+            <label className="manual-profile-field" key={field.key}>
+              <span>{field.label}</span>
+              <div className="manual-profile-control">
+                <input
+                  type={field.type}
+                  value={valueFor(field.key)}
+                  onChange={(event) => setManualValues((current) => ({ ...current, [field.key]: event.target.value }))}
+                  placeholder={"Enter " + field.label.toLowerCase()}
+                  autoComplete="off"
+                />
+                <button className="mini-button" type="button" disabled={busy || !valueFor(field.key).trim()} onClick={() => void saveManual(field.key)}>
+                  {verifiedFacts.some((fact) => fact.fact_key === field.key) ? "Update" : "Save"}
+                </button>
+              </div>
+            </label>
+          ))}
+        </div>
+        {manualError && <p className="form-error" role="alert">{manualError}</p>}
+        <p className="inline-note"><span>ⓘ</span> Manually entered values are marked as user-verified after you save them. Check spelling and numbers carefully. You can update them here at any time.</p>
+      </section>
       <div className="profile-intro"><div><div className="profile-shield">◈</div><div><strong>Your information profile</strong><p>Only values you approve are marked as reviewed and made available for future form matching.</p></div></div><span className="reviewed-count">{verifiedFacts.length} reviewed</span></div>
       <section className="surface-card profile-section">
         <div className="section-head"><div><p className="eyebrow">SAVED INFORMATION</p><h3>Reviewed profile</h3></div><span className="soft-badge">{verifiedFacts.length} fields</span></div>
-        {verifiedFacts.length === 0 ? <EmptyState title="Nothing verified yet" text="Run OCR on a document, then approve the values you want to save here." /> : (
+        {verifiedFacts.length === 0 ? <EmptyState title="Nothing verified yet" text="Enter information manually above or run OCR on a document and approve the values you want to save here." /> : (
           <div className="fact-grid">{verifiedFacts.map((fact) => (
             <div className="fact-card" key={fact.id}><div className="fact-label">{displayFactKey(fact.fact_key)} <span className="verified-dot">✓ Reviewed</span></div><strong>{fact.fact_value}</strong><small>Source: {fact.source_document_id ? docName(fact.source_document_id) : "Manually added"}</small></div>
           ))}</div>
