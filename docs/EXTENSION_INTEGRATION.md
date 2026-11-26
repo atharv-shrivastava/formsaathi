@@ -15,7 +15,7 @@ When the user selects **Scan current page**, the content script collects visible
 - Placeholder and name attributes.
 - Text labels for dropdown choices.
 
-The scan does not read or transmit values already typed into the form. The extension does not send the complete DOM, form submission payload, cookies or original document files.
+The scan does not read or transmit values already typed into the form. The extension does not send the complete DOM, form submission payload or cookies. Original document files are not sent as part of the webpage AI matching request.
 
 After the user confirms the one-time AI consent prompt, the extension sends the field descriptors and page title to `POST /api/forms/analyze` on the hosted Node API. The request includes the current Supabase access token as a Bearer token.
 
@@ -101,7 +101,7 @@ The hosted route returns a clear configuration error until the key is present. T
 - AI use requires explicit consent at scan time.
 - Typed form values and original documents are not sent to Gemini.
 - The model cannot supply the final personal value; the backend returns the exact verified database value for a validated fact key.
-- The route is rate-limited per user and caps fields, options and profile facts.
+- The routes are rate-limited per user and cap fields, options, profile facts and file sizes.
 - File upload inputs, passwords, checkboxes and radio buttons are not suggested for autofill.
 - The user checks every result and manually submits the official form.
 
@@ -143,9 +143,17 @@ Set `GEMINI_API_KEY` on the Render `formsaathi-ocr-api` service. `GEMINI_VISION_
 
 Paper-form placement is best-effort. Perspective distortion, handwriting, stamps, dense layouts, multi-column pages and faint labels can result in incorrect or missing placements. The user must verify the image before printing or submitting it.
 
-## Separate local document vault
+## Extension document OCR and image preparation
 
-The extension's IndexedDB document vault remains separate from the web app's private Supabase Storage bucket. Files uploaded directly into the extension remain in that browser. Existing extension OCR/image-preparation helpers still use the local development API at `127.0.0.1:8787`; the cloud AI form-analysis route is a separate hosted path.
+The extension's IndexedDB document vault remains separate from the web app's private Supabase Storage bucket. Files added from the extension stay in that browser unless the user scans a page and explicitly approves processing relevant documents through hosted OCR.
+
+- The extension checks `GET /health` on the hosted Node API at `https://formsaathi-ocr-api.onrender.com`; it does not require a local server on the user's computer.
+- After a separate consent prompt, relevant documents are sent one at a time to authenticated `POST /api/ocr` with the user's Supabase access token.
+- The backend processes the file in memory, returns OCR text and unverified candidate facts, and does not save the uploaded file to its own disk. Candidates remain in the extension's browser-local vault until the user reviews them.
+- Image preparation uses authenticated `POST /api/prepare-image` on the same hosted API. It also requires a connected FormSaathi account.
+- Both routes use the same Render Node API as AI form matching. The extension must not call `127.0.0.1:8787` in its packaged build.
+
+Do not upload sensitive real documents in this prototype unless you have reviewed the privacy and security implications.
 
 ## Installation and distribution
 
