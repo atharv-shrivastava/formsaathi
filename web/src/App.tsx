@@ -375,7 +375,10 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         headers: { Authorization: "Bearer " + sessionData.session.access_token },
         body: form
       });
-      const payload = await response.json().catch(() => ({})) as { facts?: unknown[]; error?: string };
+      const payload = await response.json().catch(() => ({})) as {
+        facts?: Array<{ key: string; value: string; confidence?: number; evidence?: string }>;
+        error?: string;
+      };
       if (!response.ok) throw new Error(payload.error || ("OCR service returned HTTP " + response.status + ". Check the backend route and Render logs."));
       const extracted = Array.isArray(payload.facts) ? payload.facts : [];
       const { error: clearError } = await client.from("extracted_facts").delete().eq("document_id", document.id);
