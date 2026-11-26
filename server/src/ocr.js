@@ -37,7 +37,9 @@ async function recognizeWithRapidOcr(buffer) {
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.detail || payload.error || "RapidOCR could not process this image.");
+    const error = new Error(payload.detail || payload.error || "RapidOCR could not process this image.");
+    error.status = response.status;
+    throw error;
   }
   return typeof payload.text === "string" ? payload.text : "";
 }
@@ -57,14 +59,22 @@ async function recognizeImage(buffer) {
     .jpeg({ quality: 92, mozjpeg: true })
     .toBuffer();
 
-  const rapidText = await recognizeWithRapidOcr(prepared);
-  if (rapidText !== null) return rapidText;
+  try {
+    const rapidText = await recognizeWithRapidOcr(prepared);
+    if (rapidText !== null && rapidText.trim()) return rapidText;
+  } catch (error) {
+    // A transient RapidOCR inference failure should not make document extraction unusable.
+    // Authentication errors indicate a deployment configuration problem and must remain visible.
+    if ([401, 403].includes(error?.status)) throw error;
+    console.warn("RapidOCR failed; falling back to Tesseract:", error instanceof Error ? error.message : error);
+  }
 
-  // Local development fallback. Hosted deployments configure the RapidOCR service.
   const grayscale = await sharp(prepared).grayscale().normalize().png().toBuffer();
   const worker = await getOcrWorker();
   const result = await worker.recognize(grayscale);
-  return result.data.text || "";
+  const fallbackText = result.data.text || "";
+  if (!fallbackText.trim()) throw new Error("Neither RapidOCR nor fallback OCR could read text from this file. Try a clearer JPG/PNG photo or a text-based PDF.");
+  return fallbackText;
 }
 
 function getPdfTextLines(items) {
