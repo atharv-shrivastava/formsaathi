@@ -5,8 +5,8 @@ AI-assisted government form guidance and autofill. The product has two user-faci
 ## Current repository layout
 
 - `web/`: React + Vite account workspace.
-- `extension/`: Chrome Manifest V3 extension built with WXT and React. Its current document vault is still local to the browser; account pairing is the next integration milestone.
-- `server/`: authenticated Node.js API, optional AI field mapping and image preparation service.
+- `extension/`: Chrome Manifest V3 extension built with WXT and React. It signs in to the shared Supabase account and sends form field descriptors to the authenticated AI analysis API. Its document vault remains local to the browser.
+- `server/`: authenticated Node.js API, Gemini-backed form analysis and image preparation service.
 - `rapidocr_service/`: private-token-protected Python API running RapidOCR on CPU.
 - `supabase/migrations/`: Postgres schema, Row Level Security policies and private Storage bucket setup.
 - `demo/`: synthetic scholarship form for extension testing.
@@ -18,6 +18,7 @@ AI-assisted government form guidance and autofill. The product has two user-faci
 - Private document upload and category management (PDF, JPG, PNG and WebP; 10 MB per file).
 - On-demand OCR using RapidOCR through the authenticated Node API.
 - Candidate facts are saved as pending and must be individually reviewed before they enter the user's verified profile.
+- Paper-form camera/gallery scan: OCR reads printed labels, Gemini vision locates writable areas, and exact reviewed profile values are overlaid onto a new downloadable image.
 - Application progress tracker.
 - Privacy centre with data deletion for documents, extracted candidates, verified profile facts and application records.
 
@@ -25,13 +26,14 @@ AI-assisted government form guidance and autofill. The product has two user-faci
 
 Supabase is the account and data layer: Auth identifies the user, Postgres stores user-owned metadata and reviewed facts, and a private Storage bucket holds original files. Row Level Security (RLS) scopes every user-owned table and the Storage bucket to the authenticated user.
 
-The browser talks only to the Node API. That API checks the Supabase user session, enforces upload and rate limits, then forwards the preprocessed image to the separate RapidOCR service using a private server-to-server token. The Python service processes image bytes in memory and does not write uploaded files to disk. The extension has not yet been paired with web accounts. See [the extension integration plan](docs/EXTENSION_INTEGRATION.md).
+The web app and extension use the same Supabase account. During a browser form scan, the extension sends only visible field descriptors (labels, names, placeholders, control types and dropdown choices) to the authenticated Node API. The web app also provides a mobile-friendly paper-form scanner with camera and gallery inputs. It does not send values already typed into the government form. The API validates the Supabase user, reads only that user's verified profile facts under Row Level Security, filters to facts plausibly relevant to the detected fields, and sends those facts plus field descriptors to Google Gemini only after explicit user consent. The model returns fact-key matches, not personal values; the backend validates each match and supplies the exact stored value. The extension presents suggestions for review and requires per-field approval before filling. For paper forms, the selected photo is processed in memory: RapidOCR reads labels, Gemini vision returns normalized coordinates for clearly empty writing areas, and Sharp overlays the exact verified values. The new JPEG is returned to the browser for review and download; the uploaded photo is not written to the FormSaathi document vault.
 
 ## Prerequisites
 
 - Node.js 22.12+ or a current 24.x LTS release.
 - pnpm 12.22.0.
 - A Supabase project for the web app.
+- A Gemini API key for AI form analysis (configured only on the Node API host).
 - Chrome or Chromium for extension development.
 
 Install the pinned package manager if needed:
@@ -55,7 +57,7 @@ From the repository root:
 
     pnpm install
 
-Copy `server/.env.example` to `server/.env` and `web/.env.example` to `web/.env.local`.
+Copy `server/.env.example` to `server/.env` and `web/.env.example` to `web/.env.local`. Set `GEMINI_API_KEY` only in the Node API environment. Never add it to the extension, web client, or Git.
 
 Install the Python OCR dependencies once:
 
@@ -103,7 +105,8 @@ The extension does not automatically submit government applications. CAPTCHA, pa
 
 ## Current limitations
 
-- The extension is not yet connected to Supabase accounts or the web app. Pairing and extension access to verified profile facts are next.
+- AI form analysis requires `GEMINI_API_KEY` on the hosted Node API. Each request requires explicit consent. Only relevant verified profile facts and detected field descriptions are sent to Gemini; the backend returns original stored values only after validating model-selected fact keys.
+- Paper-form image filling is AI-assisted, not guaranteed. Gemini's placement coordinates can be imperfect. The user must inspect every overlay and the original image remains unchanged. The route accepts JPG, PNG and WebP photos up to 10 MB.
 - The hosted RapidOCR processor uses a free CPU service and may take longer on its first request or after inactivity.
 - Candidate extraction still uses labelled-line heuristics; OCR text is not automatically treated as verified profile data.
 - The default RapidOCR model is English-oriented. Hindi/Devanagari recognition requires configuring and evaluating the corresponding RapidOCR model before relying on it.

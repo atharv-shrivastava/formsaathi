@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { disconnectExtensionAccount, getExtensionAccount, getVerifiedProfileFacts, signInExtensionAccount, type ExtensionAccount } from "../../lib/account";
-import { checkApi, extractDocument, prepareImage as requestImagePreparation, requestAiMappings } from "../../lib/api";
+import { disconnectExtensionAccount, getExtensionAccount, getExtensionSession, getVerifiedProfileFacts, signInExtensionAccount, type ExtensionAccount } from "../../lib/account";
+import { checkApi, extractDocument, prepareImage as requestImagePreparation, requestFormAnalysis } from "../../lib/api";
 import { deleteDocument, listDocuments, saveDocument } from "../../lib/db";
 import { canonicalFieldKey, categoryForKey, createReviewRows, inferDocumentCategory, retrieveRelevantDocuments } from "../../lib/mapping";
 import type { CandidateFact, DocumentCategory, ReviewRow, ScanResult, StoredDocument } from "../../lib/types";
@@ -19,6 +19,28 @@ const categories: Array<{ value: DocumentCategory; label: string }> = [
 ];
 
 const emptyScan: ScanResult = { title: "", url: "", fields: [] };
+
+function mergeAiMappings(
+  rows: ReviewRow[],
+  mappings: Array<{ fieldId: string; factId: string; factKey: string; value: string; confidence: number }>
+): ReviewRow[] {
+  const byField = new Map(mappings.map((mapping) => [mapping.fieldId, mapping]));
+  return rows.map((row) => {
+    const suggestion = byField.get(row.field.id);
+    if (!suggestion || row.status === "conflict" || row.status === "filled" || row.value.trim()) return row;
+    return {
+      ...row,
+      canonicalKey: suggestion.factKey,
+      value: suggestion.value,
+      sourceName: "Verified FormSaathi profile",
+      sourceId: suggestion.factId,
+      confidence: suggestion.confidence,
+      evidence: "AI matched this field to the approved profile fact '" + suggestion.factKey + "'. The original stored value is shown; verify it before filling.",
+      status: "needs-review"
+    };
+  });
+}
+
 
 export default function App() {
   const [account, setAccount] = useState<ExtensionAccount | null>(null);
@@ -176,6 +198,11 @@ export default function App() {
       }
       const nextScan = response.result;
       setScan(nextScan);
+      if (nextScan.fields.length === 0) {
+        setRows([]);
+        setStatus("No visible form fields were found on this page.");
+        return;
+      }
 
       const relevantDocuments = retrieveRelevantDocuments(nextScan.fields, documents);
       const fieldKeys = Array.from(new Set(
@@ -204,7 +231,7 @@ export default function App() {
 
       let localDocumentCount = 0;
       if (relevantDocuments.length > 0 && apiReady) {
-        setStatus("Loading approved cloud profile values and processing " + relevantDocuments.length + " relevant local document(s): " + relevantCategories.join(", ") + ".");
+        setStatus("Processing " + relevantDocuments.length + " relevant browser-local document(s): " + relevantCategories.join(", ") + ".");
         for (const document of relevantDocuments) {
           let documentFacts = document.cachedFacts || [];
           if (!document.cachedAt) {
@@ -218,21 +245,47 @@ export default function App() {
         setDocuments(await listDocuments());
       }
 
-      setRows(createReviewRows(nextScan.fields, facts));
-      if (facts.length === 0) {
-        const accountHint = account ? " No reviewed cloud profile values matched these fields." : " Connect your FormSaathi account to use reviewed profile values from the website.";
-        const documentHint = relevantDocuments.length > 0 && !apiReady
-          ? " The local OCR service is offline, so browser-local documents were not processed."
-          : " Add and review the relevant profile information on the FormSaathi website.";
-        setStatus("Found " + nextScan.fields.length + " visible controls." + accountHint + documentHint);
+      const baseRows = createReviewRows(nextScan.fields, facts);
+      let finalRows = baseRows;
+      let aiMessage = "";
+
+      if (account) {
+        const consent = window.confirm(
+          "For AI form analysis, FormSaathi sends detected field labels, names, placeholders and dropdown choices to its backend. The backend retrieves only approved profile facts that appear relevant and sends those values to Google Gemini for matching. Values already typed into the form and original document files are not sent. Continue with this one-time AI analysis?"
+        );
+
+        if (consent) {
+          try {
+            setStatus("Sending field descriptions to the FormSaathi backend for AI matching…");
+            const session = await getExtensionSession();
+            if (!session) throw new Error("Your FormSaathi session expired. Connect your account again.");
+            const analysis = await requestFormAnalysis(nextScan, session.access_token);
+            finalRows = mergeAiMappings(baseRows, analysis.mappings);
+            aiMessage = analysis.note || (analysis.aiUsed ? "AI matching completed." : "No AI matches were found.");
+            if (analysis.aiUsed) {
+              aiMessage = analysis.matchedCount + " AI suggestion(s) returned by " + (analysis.model || "Gemini") + ". Review each value before filling.";
+            }
+          } catch (error) {
+            aiMessage = "AI analysis unavailable: " + (error instanceof Error ? error.message : "Please retry.");
+          }
+        } else {
+          aiMessage = "AI analysis was skipped. Deterministic matches are still available for review.";
+        }
       } else {
-        const cloudSummary = cloudFactCount + " approved cloud profile value(s)";
-        const localSummary = localDocumentCount + " browser-local document(s) processed";
-        const localOffline = relevantDocuments.length > 0 && !apiReady
-          ? " Local OCR is offline; browser-local documents were skipped."
-          : "";
-        setStatus("Detected " + nextScan.fields.length + " controls and matched " + cloudSummary + " plus " + localSummary + "." + localOffline + " Review every suggested value before filling.");
+        aiMessage = "Connect your FormSaathi account to send this scan to the hosted backend and use AI matching.";
       }
+
+      setRows(finalRows);
+      const aiMatchedCount = finalRows.filter((row) => row.evidence?.startsWith("AI matched")).length;
+      const localOffline = relevantDocuments.length > 0 && !apiReady
+        ? " Browser-local OCR was skipped because the local OCR service is offline."
+        : "";
+      setStatus(
+        "Detected " + nextScan.fields.length + " fields; " +
+        cloudFactCount + " direct verified-profile match(es), " +
+        localDocumentCount + " browser-local document(s) processed, and " +
+        aiMatchedCount + " AI match(es). " + aiMessage + localOffline
+      );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not scan this page.");
     } finally {
@@ -283,36 +336,30 @@ export default function App() {
   }
 
   async function tryAiMapping() {
-    if (!window.confirm("This sends only already-extracted candidate facts and detected field labels from relevant document categories to the configured Gemini API. Original documents are not sent. Continue?")) return;
+    if (!scan.fields.length) {
+      setStatus("Scan a form before requesting AI mapping.");
+      return;
+    }
+    if (!account) {
+      setStatus("Connect your FormSaathi account before using backend AI mapping.");
+      return;
+    }
+    if (!window.confirm(
+      "This sends the detected field labels and relevant approved profile values to the FormSaathi backend and Google Gemini. It does not send values already typed into the form or original document files. Continue?"
+    )) return;
+
     setBusy(true);
-    setStatus("Requesting optional AI mapping…");
+    setStatus("Requesting AI mapping from the hosted FormSaathi backend…");
     try {
-      const relevantDocuments = retrieveRelevantDocuments(scan.fields, documents);
-      const relevantIds = new Set(relevantDocuments.map((document) => document.id));
-      const facts = documents
-        .filter((document) => relevantIds.has(document.id))
-        .flatMap((document) => (document.cachedFacts || []).map((fact) => ({
-          ...fact,
-          sourceId: document.id,
-          sourceName: document.name
-        })));
-      if (!facts.length) throw new Error("No extracted facts from relevant documents are available to map.");
-      const response = await requestAiMappings(scan.fields, facts);
-      setRows((current) => current.map((row) => {
-        const suggestion = response.mappings.find((mapping) => mapping.fieldId === row.field.id);
-        if (!suggestion || row.value || row.status === "conflict") return row;
-        const source = facts.find((fact) => fact.key === suggestion.factKey && fact.value === suggestion.value);
-        return {
-          ...row,
-          value: suggestion.value,
-          canonicalKey: suggestion.factKey,
-          sourceName: source?.sourceName,
-          sourceId: source?.sourceId,
-          confidence: suggestion.confidence,
-          status: "needs-review"
-        };
-      }));
-      setStatus("AI suggestions received. They are unverified; check every value before filling.");
+      const session = await getExtensionSession();
+      if (!session) throw new Error("Your FormSaathi session expired. Connect your account again.");
+      const analysis = await requestFormAnalysis(scan, session.access_token);
+      setRows((current) => mergeAiMappings(current, analysis.mappings));
+      setStatus(
+        analysis.aiUsed
+          ? (analysis.matchedCount || analysis.mappings.length) + " AI suggestion(s) received. Review every value before filling."
+          : analysis.note
+      );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "AI mapping is unavailable.");
     } finally {
@@ -355,7 +402,7 @@ export default function App() {
       </section>
 
       <div className="privacy-note">
-        Your approved profile facts sync from FormSaathi. Documents added directly to this extension remain in this browser and are processed only when you scan a form.
+        Your approved profile facts sync from FormSaathi. AI analysis sends only detected field descriptions and relevant approved facts after your confirmation; typed form values and original files are not sent.
       </div>
 
       <nav className="tabs">
@@ -432,8 +479,8 @@ export default function App() {
             <>
               <div className="progress-row"><span>{filledCount} of {rows.length} fields filled</span><b>{Math.round((filledCount / rows.length) * 100)}%</b></div>
               <div className="progress-track"><div style={{ width: (filledCount / rows.length * 100) + "%" }} /></div>
-              <button className="secondary-button full" disabled={busy} onClick={() => void tryAiMapping()}>Ask AI for mapping suggestions</button>
-              <p className="muted small">Optional. Requires a Gemini key on the local service and sends extracted facts only after your confirmation.</p>
+              <button className="secondary-button full" disabled={busy} onClick={() => void tryAiMapping()}>Re-run AI form analysis</button>
+              <p className="muted small">Uses the hosted FormSaathi backend and Gemini. Each AI request requires your confirmation.</p>
               <div className="mapping-list">
                 {rows.map((row, index) => (
                   <article className="mapping-card" key={row.field.id}>

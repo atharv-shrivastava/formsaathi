@@ -16,7 +16,7 @@ interface AuthPayload {
   user: AuthUser;
 }
 
-interface ExtensionSession {
+export interface ExtensionSession {
   access_token: string;
   refresh_token: string;
   expires_at: number;

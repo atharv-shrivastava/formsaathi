@@ -10,7 +10,8 @@ export default defineConfig({
     host_permissions: [
       "http://127.0.0.1:8787/*",
       "https://jsurlqzbpmianyvmteto.supabase.co/*",
-      "https://formsaathi-web.vercel.app/*"
+      "https://formsaathi-web.vercel.app/*",
+      "https://formsaathi-ocr-api.onrender.com/*"
     ],
     side_panel: {
       default_path: "sidepanel.html"
