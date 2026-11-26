@@ -66,10 +66,15 @@ jobs:
       - name: Package Chrome extension
         run: pnpm --filter @formsaathi/extension zip
 
+      - name: Stage extension package
+        run: |
+          mkdir -p release
+          cp extension/.output/*.zip release/FormSaathi-Chrome-Extension.zip
+
       - name: Upload extension package
         uses: actions/upload-artifact@v4
         with:
           name: formsaathi-chrome-extension
-          path: extension/.output/*.zip
+          path: release/FormSaathi-Chrome-Extension.zip
           if-no-files-found: error
           retention-days: 14
