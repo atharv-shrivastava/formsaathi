@@ -37,6 +37,21 @@ function fieldSearchText(field) {
   return normalize([field.label, field.name, field.placeholder].filter(Boolean).join(" "));
 }
 
+function matchesFactToField(field, fact) {
+  const fieldText = fieldSearchText(field);
+  const key = String(fact.fact_key || "").trim();
+  const normalizedKey = normalize(key.replace(/_/g, " "));
+  const aliases = factAliases[key] || [];
+  if (!fieldText || !key) return false;
+  if (aliases.some((alias) => fieldText.includes(normalize(alias)))) return true;
+  if (normalizedKey && (fieldText === normalizedKey || fieldText.includes(normalizedKey))) return true;
+
+  const tokens = key.split("_")
+    .map(normalize)
+    .filter((token) => token.length >= 3 && !stopWords.has(token));
+  return tokens.length > 0 && tokens.every((token) => fieldText.split(" ").includes(token));
+}
+
 export function sanitizeDetectedFields(rawFields) {
   if (!Array.isArray(rawFields) || rawFields.length === 0) {
     throw new Error("Scan a form containing visible fields before analysis.");
@@ -82,18 +97,8 @@ export function filterRelevantProfileFacts(fields, facts) {
   const searchableFields = fields.map(fieldSearchText).filter(Boolean);
   return facts.filter((fact) => {
     const key = String(fact.fact_key || "").trim();
-    const normalizedKey = normalize(key.replace(/_/g, " "));
     if (!key || !String(fact.fact_value || "").trim()) return false;
-    const keyAliases = factAliases[key] || [];
-    const significantTokens = key.split("_")
-      .map(normalize)
-      .filter((token) => token.length >= 3 && !stopWords.has(token));
-
-    return searchableFields.some((fieldText) => {
-      if (normalizedKey && (fieldText === normalizedKey || fieldText.includes(normalizedKey))) return true;
-      if (keyAliases.some((alias) => fieldText.includes(normalize(alias)))) return true;
-      return significantTokens.some((token) => fieldText.split(" ").includes(token));
-    });
+    return fields.some((field) => matchesFactToField(field, fact));
   }).slice(0, 80);
 }
 
@@ -109,6 +114,7 @@ export function validateAiMappings(rawMappings, fields, facts) {
     const fact = factsByKey.get(String(raw.factKey || ""));
     const confidence = Number(raw.confidence);
     if (!field || !fact || field.isFile || blockedInputTypes.has(field.inputType)) continue;
+    if (!matchesFactToField(field, fact)) continue;
     if (!Number.isFinite(confidence) || confidence < 0.70 || confidence > 1) continue;
     if (!String(fact.fact_value || "").trim()) continue;
 
