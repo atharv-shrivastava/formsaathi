@@ -5,7 +5,7 @@ AI-assisted government form guidance and autofill. The product has two user-faci
 ## Current repository layout
 
 - `web/`: React + Vite account workspace.
-- `extension/`: Chrome Manifest V3 extension built with WXT and React. Its current document vault is still local to the browser; account pairing is the next integration milestone.
+- `extension/`: Chrome Manifest V3 extension built with WXT and React. It signs in to the shared Supabase account and sends form field descriptors to the authenticated AI analysis API. Its document vault remains local to the browser.
 - `server/`: authenticated Node.js API, Gemini-backed form analysis and image preparation service.
 - `rapidocr_service/`: private-token-protected Python API running RapidOCR on CPU.
 - `supabase/migrations/`: Postgres schema, Row Level Security policies and private Storage bucket setup.
