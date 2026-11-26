@@ -5,7 +5,7 @@ AI-assisted government form guidance and autofill. The product has two user-faci
 ## Current repository layout
 
 - `web/`: React + Vite account workspace.
-- `extension/`: Chrome Manifest V3 extension built with WXT and React. It signs in to the shared Supabase account and sends form field descriptors to the authenticated AI analysis API. Its document vault remains local to the browser.
+- `extension/`: Chrome Manifest V3 extension built with WXT and React. It signs in to the shared Supabase account, calls the hosted authenticated OCR/image-preparation and AI analysis APIs, and keeps its document vault local to the browser.
 - `server/`: authenticated Node.js API, Gemini-backed form analysis and image preparation service.
 - `rapidocr_service/`: private-token-protected Python API running RapidOCR on CPU.
 - `supabase/migrations/`: Postgres schema, Row Level Security policies and private Storage bucket setup.
@@ -26,7 +26,7 @@ AI-assisted government form guidance and autofill. The product has two user-faci
 
 Supabase is the account and data layer: Auth identifies the user, Postgres stores user-owned metadata and reviewed facts, and a private Storage bucket holds original files. Row Level Security (RLS) scopes every user-owned table and the Storage bucket to the authenticated user.
 
-The web app and extension use the same Supabase account. During a browser form scan, the extension sends only visible field descriptors (labels, names, placeholders, control types and dropdown choices) to the authenticated Node API. The web app also provides a mobile-friendly paper-form scanner with camera and gallery inputs. It does not send values already typed into the government form. The API validates the Supabase user, reads only that user's verified profile facts under Row Level Security, filters to facts plausibly relevant to the detected fields, and sends those facts plus field descriptors to Google Gemini only after explicit user consent. The model returns fact-key matches, not personal values; the backend validates each match and supplies the exact stored value. The extension presents suggestions for review and requires per-field approval before filling. For paper forms, the selected photo is processed in memory: RapidOCR reads labels, Gemini vision returns normalized coordinates for clearly empty writing areas, and Sharp overlays the exact verified values. The new JPEG is returned to the browser for review and download; the uploaded photo is not written to the FormSaathi document vault.
+The web app and extension use the same Supabase account. During a browser form scan, the extension sends only visible field descriptors (labels, names, placeholders, control types and dropdown choices) to the authenticated Node API. Relevant extension-local documents are sent to hosted OCR only after a separate user confirmation; results are cached in the browser-local vault. The web app also provides a mobile-friendly paper-form scanner with camera and gallery inputs. It does not send values already typed into the government form. The API validates the Supabase user, reads only that user's verified profile facts under Row Level Security, filters to facts plausibly relevant to the detected fields, and sends those facts plus field descriptors to Google Gemini only after explicit user consent. The model returns fact-key matches, not personal values; the backend validates each match and supplies the exact stored value. The extension presents suggestions for review and requires per-field approval before filling. For paper forms, the selected photo is processed in memory: RapidOCR reads labels, Gemini vision returns normalized coordinates for clearly empty writing areas, and Sharp overlays the exact verified values. The new JPEG is returned to the browser for review and download; the uploaded photo is not written to the FormSaathi document vault.
 
 ## Prerequisites
 
@@ -77,13 +77,13 @@ Start the web app in a third terminal:
 
     pnpm dev:web
 
-Open `http://localhost:5173`, create an account, upload a synthetic document and choose **Run OCR** from the document list. OCR requires the local service to be running. Review the candidates under Information profile before approving them.
+Open `http://localhost:5173`, create an account, upload a synthetic document and choose **Run OCR** from the document list. The local web app uses your local Node and RapidOCR services. Review candidates under Information profile before approving them.
 
 To run the extension separately:
 
     pnpm dev:extension
 
-Load `extension/.output/chrome-mv3-dev` from `chrome://extensions`. The extension still uses its local IndexedDB vault until account pairing is implemented.
+Load `extension/.output/chrome-mv3-dev` from `chrome://extensions`. The extension signs in to the shared account, checks the hosted Render API, and processes relevant files from its local IndexedDB vault through hosted OCR only after a separate consent prompt. The extension does not need a local OCR service running on the user's machine.
 
 ## Commands
 
