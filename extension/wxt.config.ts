@@ -8,7 +8,6 @@ export default defineConfig({
     version: "0.1.0",
     permissions: ["storage", "activeTab", "sidePanel"],
     host_permissions: [
-      "http://127.0.0.1:8787/*",
       "https://jsurlqzbpmianyvmteto.supabase.co/*",
       "https://formsaathi-web.vercel.app/*",
       "https://formsaathi-ocr-api.onrender.com/*"

@@ -156,13 +156,15 @@ export default function App() {
       return;
     }
     if (!apiReady) {
-      setStatus("Start the local service before preparing images: npm run dev:server.");
+      setStatus("The hosted FormSaathi service is unavailable. Check your connection and retry.");
       return;
     }
     setPreparingId(document.id);
     setStatus("Preparing a JPEG copy. Your original vault document will remain unchanged.");
     try {
-      const result = await requestImagePreparation(document, maxKb, maxWidth, maxHeight);
+      const session = await getExtensionSession();
+      if (!session) throw new Error("Connect your FormSaathi account before preparing an image.");
+      const result = await requestImagePreparation(document, maxKb, maxWidth, maxHeight, session.access_token);
       const url = URL.createObjectURL(result.blob);
       const anchor = window.document.createElement("a");
       anchor.href = url;
@@ -230,19 +232,38 @@ export default function App() {
       }
 
       let localDocumentCount = 0;
-      if (relevantDocuments.length > 0 && apiReady) {
-        setStatus("Processing " + relevantDocuments.length + " relevant browser-local document(s): " + relevantCategories.join(", ") + ".");
-        for (const document of relevantDocuments) {
-          let documentFacts = document.cachedFacts || [];
-          if (!document.cachedAt) {
-            const extracted = await extractDocument(document);
-            documentFacts = extracted.facts;
-            await saveDocument({ ...document, cachedText: extracted.text, cachedFacts: documentFacts, cachedAt: Date.now() });
+      let documentOcrMessage = "";
+      if (relevantDocuments.length > 0) {
+        if (!apiReady) {
+          documentOcrMessage = " Hosted document OCR is unavailable; no document was uploaded.";
+        } else if (!account) {
+          documentOcrMessage = " Connect your FormSaathi account to process selected browser-local documents.";
+        } else {
+          const cachedCount = relevantDocuments.filter((document) => Boolean(document.cachedAt)).length;
+          const uploadCount = relevantDocuments.length - cachedCount;
+          const approvedUpload = uploadCount === 0 || window.confirm(
+            "FormSaathi will send " + uploadCount + " relevant document(s) from this browser's local vault to its hosted OCR processor on Render. Files are processed in memory and are not saved to the server's disk. Extracted values remain unverified until you review them. Continue?"
+          );
+
+          if (!approvedUpload) {
+            documentOcrMessage = " Document OCR was skipped because you declined this upload.";
+          } else {
+            const session = await getExtensionSession();
+            if (!session) throw new Error("Your FormSaathi session expired. Connect your account again.");
+            setStatus("Processing " + relevantDocuments.length + " relevant document(s) through hosted FormSaathi OCR: " + relevantCategories.join(", ") + ".");
+            for (const document of relevantDocuments) {
+              let documentFacts = document.cachedFacts || [];
+              if (!document.cachedAt) {
+                const extracted = await extractDocument(document, session.access_token);
+                documentFacts = extracted.facts;
+                await saveDocument({ ...document, cachedText: extracted.text, cachedFacts: documentFacts, cachedAt: Date.now() });
+              }
+              for (const fact of documentFacts) facts.push({ ...fact, sourceId: document.id, sourceName: document.name });
+            }
+            localDocumentCount = relevantDocuments.length;
+            setDocuments(await listDocuments());
           }
-          for (const fact of documentFacts) facts.push({ ...fact, sourceId: document.id, sourceName: document.name });
         }
-        localDocumentCount = relevantDocuments.length;
-        setDocuments(await listDocuments());
       }
 
       const baseRows = createReviewRows(nextScan.fields, facts);
@@ -277,13 +298,11 @@ export default function App() {
 
       setRows(finalRows);
       const aiMatchedCount = finalRows.filter((row) => row.evidence?.startsWith("AI matched")).length;
-      const localOffline = relevantDocuments.length > 0 && !apiReady
-        ? " Browser-local OCR was skipped because the local OCR service is offline."
-        : "";
+      const localOffline = documentOcrMessage;
       setStatus(
         "Detected " + nextScan.fields.length + " fields; " +
         cloudFactCount + " direct verified-profile match(es), " +
-        localDocumentCount + " browser-local document(s) processed, and " +
+        localDocumentCount + " browser-local document(s) processed by hosted OCR, and " +
         aiMatchedCount + " AI match(es). " + aiMessage + localOffline
       );
     } catch (error) {
@@ -378,7 +397,7 @@ export default function App() {
           <div className="brand-caption">Your form companion</div>
         </div>
         <div className={apiReady ? "service-pill online" : "service-pill offline"}>
-          <span /> OCR {apiReady ? "online" : "offline"}
+          <span /> Hosted OCR {apiReady ? "online" : "offline"}
         </div>
       </header>
 
@@ -402,7 +421,7 @@ export default function App() {
       </section>
 
       <div className="privacy-note">
-        Your approved profile facts sync from FormSaathi. AI analysis sends only detected field descriptions and relevant approved facts after your confirmation; typed form values and original files are not sent.
+        Your approved profile facts sync from FormSaathi. Selected local documents are sent to hosted OCR only after a separate confirmation. AI analysis sends only detected field descriptions and relevant approved facts after your confirmation; typed form values and original files are not sent to Gemini for webpage-form matching.
       </div>
 
       <nav className="tabs">

@@ -1,9 +1,9 @@
 import type { CandidateFact, ScanResult, StoredDocument } from "./types";
 
-// Document OCR and image preparation remain tied to the local development service.
-// Form analysis uses the authenticated hosted FormSaathi API.
-export const API_BASE = "http://127.0.0.1:8787";
-export const FORM_ANALYSIS_API_BASE = "https://formsaathi-ocr-api.onrender.com";
+// All packaged-extension requests use the authenticated hosted FormSaathi API.
+// Do not point the published extension at a developer's loopback address.
+export const API_BASE = "https://formsaathi-ocr-api.onrender.com";
+export const FORM_ANALYSIS_API_BASE = API_BASE;
 
 async function readError(response: Response): Promise<string> {
   try {
@@ -33,14 +33,16 @@ export interface FormAnalysisResponse {
   note: string;
 }
 
-export async function extractDocument(document: StoredDocument): Promise<{
+export async function extractDocument(document: StoredDocument, accessToken: string): Promise<{
   text: string;
   facts: CandidateFact[];
 }> {
+  if (!accessToken) throw new Error("Connect your FormSaathi account before processing a document.");
   const form = new FormData();
   form.append("file", document.file, document.name);
   const response = await fetch(API_BASE + "/api/ocr", {
     method: "POST",
+    headers: { Authorization: "Bearer " + accessToken },
     body: form
   });
   if (!response.ok) throw new Error(await readError(response));
@@ -52,8 +54,10 @@ export async function prepareImage(
   document: StoredDocument,
   maxKb: number,
   width: number,
-  height: number
+  height: number,
+  accessToken: string
 ): Promise<{ blob: Blob; bytes: number; width: number; height: number }> {
+  if (!accessToken) throw new Error("Connect your FormSaathi account before preparing an image.");
   const form = new FormData();
   form.append("file", document.file, document.name);
   form.append("maxKb", String(maxKb));
@@ -62,6 +66,7 @@ export async function prepareImage(
 
   const response = await fetch(API_BASE + "/api/prepare-image", {
     method: "POST",
+    headers: { Authorization: "Bearer " + accessToken },
     body: form
   });
   if (!response.ok) throw new Error(await readError(response));
@@ -100,7 +105,10 @@ export async function requestFormAnalysis(
 
 export async function checkApi(): Promise<boolean> {
   try {
-    const response = await fetch(API_BASE + "/health", { method: "GET" });
+    const response = await fetch(API_BASE + "/health", {
+      method: "GET",
+      signal: AbortSignal.timeout(8000)
+    });
     return response.ok;
   } catch {
     return false;
