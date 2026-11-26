@@ -1,14 +1,36 @@
-import type { CandidateFact, StoredDocument } from "./types";
+import type { CandidateFact, ScanResult, StoredDocument } from "./types";
 
+// Document OCR and image preparation remain tied to the local development service.
+// Form analysis uses the authenticated hosted FormSaathi API.
 export const API_BASE = "http://127.0.0.1:8787";
+export const FORM_ANALYSIS_API_BASE = "https://formsaathi-ocr-api.onrender.com";
 
 async function readError(response: Response): Promise<string> {
   try {
     const body = await response.json() as { error?: string };
-    return body.error || "Local service request failed.";
+    return body.error || "FormSaathi service request failed.";
   } catch {
-    return "Local service request failed (" + response.status + ").";
+    return "FormSaathi service request failed (" + response.status + ").";
   }
+}
+
+export interface FormAnalysisMapping {
+  fieldId: string;
+  factId: string;
+  factKey: string;
+  value: string;
+  confidence: number;
+  sourceDocumentId: string | null;
+  updatedAt: string | null;
+}
+
+export interface FormAnalysisResponse {
+  mappings: FormAnalysisMapping[];
+  aiUsed: boolean;
+  fieldCount: number;
+  matchedCount?: number;
+  model?: string;
+  note: string;
 }
 
 export async function extractDocument(document: StoredDocument): Promise<{
@@ -25,7 +47,6 @@ export async function extractDocument(document: StoredDocument): Promise<{
   const result = await response.json() as { text: string; facts: CandidateFact[] };
   return { text: result.text, facts: result.facts || [] };
 }
-
 
 export async function prepareImage(
   document: StoredDocument,
@@ -53,14 +74,28 @@ export async function prepareImage(
   };
 }
 
-export async function requestAiMappings(fields: unknown[], facts: CandidateFact[]) {
-  const response = await fetch(API_BASE + "/api/ai/map", {
+export async function requestFormAnalysis(
+  scan: ScanResult,
+  accessToken: string
+): Promise<FormAnalysisResponse> {
+  if (!accessToken) throw new Error("Connect your FormSaathi account before using AI form analysis.");
+
+  const response = await fetch(FORM_ANALYSIS_API_BASE + "/api/forms/analyze", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ consent: true, fields, facts })
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + accessToken
+    },
+    body: JSON.stringify({
+      consent: true,
+      pageTitle: scan.title.slice(0, 160),
+      // Deliberately send field descriptors only. Never send what the applicant typed.
+      fields: scan.fields
+    })
   });
+
   if (!response.ok) throw new Error(await readError(response));
-  return response.json() as Promise<{ mappings: Array<{ fieldId: string; factKey: string; value: string; confidence: number }> }>;
+  return await response.json() as FormAnalysisResponse;
 }
 
 export async function checkApi(): Promise<boolean> {
