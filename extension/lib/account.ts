@@ -147,28 +147,50 @@ export async function disconnectExtensionAccount(): Promise<void> {
   }
 }
 
-export async function getVerifiedProfileFacts(keys: string[]): Promise<VerifiedProfileFact[]> {
-  const uniqueKeys = Array.from(new Set(keys)).filter((key) => /^[a-z0-9_]+$/.test(key));
-  if (uniqueKeys.length === 0) return [];
+export async function getVerifiedProfileFacts(keys?: string[]): Promise<VerifiedProfileFact[]> {
+  const uniqueKeys = keys
+    ? Array.from(new Set(keys)).filter((key) => /^[a-z0-9_]+$/.test(key))
+    : [];
+  if (keys && uniqueKeys.length === 0) return [];
 
   const session = await getExtensionSession();
   if (!session) throw new Error("Connect your FormSaathi account to retrieve reviewed profile values.");
 
-  const url = new URL(`${SUPABASE_URL}/rest/v1/profile_facts`);
-  url.searchParams.set(
-    "select",
-    "id,fact_key,fact_label,fact_value,source_document_id,confidence,updated_at"
-  );
-  url.searchParams.set("verified", "eq.true");
-  url.searchParams.set("fact_key", `in.(${uniqueKeys.join(",")})`);
-  url.searchParams.set("order", "fact_key.asc");
+  const headers = {
+    apikey: SUPABASE_PUBLISHABLE_KEY,
+    Authorization: `Bearer ${session.access_token}`
+  };
 
-  const response = await fetch(url, {
-    headers: {
-      apikey: SUPABASE_PUBLISHABLE_KEY,
-      Authorization: `Bearer ${session.access_token}`
+  async function readTable(table: "profile_facts" | "document_profile_facts"): Promise<VerifiedProfileFact[]> {
+    const url = new URL(`${SUPABASE_URL}/rest/v1/${table}`);
+    url.searchParams.set(
+      "select",
+      table === "profile_facts"
+        ? "id,fact_key,fact_label,fact_value,source_document_id,confidence,updated_at"
+        : "id,fact_key,fact_label,fact_value,document_id,confidence,updated_at"
+    );
+    url.searchParams.set("verified", "eq.true");
+    url.searchParams.set("order", "updated_at.desc");
+    url.searchParams.set("limit", "240");
+    if (uniqueKeys.length > 0) {
+      url.searchParams.set("fact_key", `in.(${uniqueKeys.join(",")})`);
     }
-  });
-  if (!response.ok) throw await responseError(response);
-  return await response.json() as VerifiedProfileFact[];
+
+    const response = await fetch(url, { headers });
+    if (!response.ok) throw await responseError(response);
+    const rows = await response.json() as Array<VerifiedProfileFact & { document_id?: string }>;
+    return rows.map((row) => ({
+      ...row,
+      source_document_id: row.source_document_id ?? row.document_id ?? null
+    }));
+  }
+
+  const [generalFacts, documentFacts] = await Promise.all([
+    readTable("profile_facts"),
+    readTable("document_profile_facts")
+  ]);
+
+  return [...generalFacts, ...documentFacts].sort((a, b) =>
+    String(b.updated_at || "").localeCompare(String(a.updated_at || ""))
+  );
 }
