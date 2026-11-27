@@ -191,14 +191,47 @@ export default function App() {
     setStatus("Inspecting visible form controls…");
     try {
       const tabId = await getActiveTabId();
-      const response = await chrome.tabs.sendMessage(tabId, { type: "FS_SCAN" }) as {
-        ok?: boolean;
-        result?: ScanResult;
-      };
-      if (!response?.ok || !response.result) {
-        throw new Error("FormSaathi could not inspect this page. It may be a restricted browser page or the content script may not be available.");
+      let frameIds = [0];
+      try {
+        const frames = await chrome.webNavigation.getAllFrames({ tabId });
+        if (frames?.length) frameIds = Array.from(new Set(frames.map((frame) => frame.frameId)));
+      } catch {
+        // Older browsers or restricted pages may not expose frame metadata. Try the top frame.
       }
-      const nextScan = response.result;
+
+      const frameResults = await Promise.all(frameIds.map(async (frameId) => {
+        try {
+          const response = await chrome.tabs.sendMessage(tabId, { type: "FS_SCAN" }, { frameId }) as {
+            ok?: boolean;
+            result?: ScanResult;
+          };
+          if (!response?.ok || !response.result) return null;
+          return {
+            frameId,
+            result: {
+              ...response.result,
+              fields: response.result.fields.map((field) => ({
+                ...field,
+                id: "frame-" + frameId + "-" + field.id,
+                domId: field.id,
+                frameId
+              }))
+            }
+          };
+        } catch {
+          return null;
+        }
+      }));
+      const availableFrames = frameResults.filter((item): item is NonNullable<typeof item> => Boolean(item));
+      if (availableFrames.length === 0) {
+        throw new Error("FormSaathi could not inspect this page. Check that the extension has access to the site, then reload the page and scan again.");
+      }
+      const primaryFrame = availableFrames.find((item) => item.frameId === 0) || availableFrames[0];
+      const nextScan: ScanResult = {
+        title: primaryFrame.result.title,
+        url: primaryFrame.result.url,
+        fields: availableFrames.flatMap((item) => item.result.fields)
+      };
       setScan(nextScan);
       if (nextScan.fields.length === 0) {
         setRows([]);
@@ -207,26 +240,31 @@ export default function App() {
       }
 
       const relevantDocuments = retrieveRelevantDocuments(nextScan.fields, documents);
-      const fieldKeys = Array.from(new Set(
-        nextScan.fields.map(canonicalFieldKey).filter((key): key is string => Boolean(key))
-      ));
       const relevantCategories = Array.from(new Set(
         nextScan.fields.map(canonicalFieldKey).map(categoryForKey).filter(Boolean)
       ));
 
       const facts: Array<CandidateFact & { sourceId: string; sourceName: string }> = [];
       let cloudFactCount = 0;
-      if (account && fieldKeys.length > 0) {
-        const cloudFacts = await getVerifiedProfileFacts(fieldKeys);
+      if (account) {
+        const cloudFacts = await getVerifiedProfileFacts();
         cloudFactCount = cloudFacts.length;
         for (const fact of cloudFacts) {
+          const documentSpecific = Boolean(fact.source_document_id);
           facts.push({
             key: fact.fact_key,
+            label: fact.fact_label || undefined,
             value: fact.fact_value,
-            confidence: fact.confidence ?? 0.92,
-            evidence: "Reviewed and approved in your FormSaathi information profile.",
+            confidence: fact.confidence ?? (documentSpecific ? 0.9 : 0.96),
+            evidence: documentSpecific
+              ? "Reviewed and approved from a specific FormSaathi document."
+              : "Reviewed and saved as general FormSaathi information.",
             sourceId: fact.id,
-            sourceName: "FormSaathi verified profile"
+            sourceName: documentSpecific
+              ? "Document-specific · " + String(fact.source_document_id).slice(0, 8)
+              : "General profile",
+            scope: documentSpecific ? "document" : "general",
+            sourceDocumentId: fact.source_document_id
           });
         }
       }
@@ -258,7 +296,7 @@ export default function App() {
                 documentFacts = extracted.facts;
                 await saveDocument({ ...document, cachedText: extracted.text, cachedFacts: documentFacts, cachedAt: Date.now() });
               }
-              for (const fact of documentFacts) facts.push({ ...fact, sourceId: document.id, sourceName: document.name });
+              for (const fact of documentFacts) facts.push({ ...fact, sourceId: document.id, sourceName: document.name, scope: "document", sourceDocumentId: document.id });
             }
             localDocumentCount = relevantDocuments.length;
             setDocuments(await listDocuments());
@@ -315,7 +353,7 @@ export default function App() {
   async function highlight(row: ReviewRow) {
     try {
       const tabId = await getActiveTabId();
-      await chrome.tabs.sendMessage(tabId, { type: "FS_HIGHLIGHT", fieldId: row.field.id, label: row.field.label });
+      await chrome.tabs.sendMessage(tabId, { type: "FS_HIGHLIGHT", fieldId: row.field.domId || row.field.id, label: row.field.label }, { frameId: row.field.frameId ?? 0 });
     } catch {
       setStatus("Could not highlight this field. Scan the page again.");
     }
@@ -339,9 +377,9 @@ export default function App() {
       const tabId = await getActiveTabId();
       const response = await chrome.tabs.sendMessage(tabId, {
         type: "FS_FILL",
-        fieldId: row.field.id,
+        fieldId: row.field.domId || row.field.id,
         value: row.value
-      }) as { ok?: boolean; message?: string };
+      }, { frameId: row.field.frameId ?? 0 }) as { ok?: boolean; message?: string };
       if (!response?.ok) throw new Error(response?.message || "The field could not be filled.");
       setRows((current) => current.map((item, itemIndex) =>
         itemIndex === index ? { ...item, status: "filled" } : item
@@ -385,9 +423,9 @@ export default function App() {
         try {
           const response = await chrome.tabs.sendMessage(tabId, {
             type: "FS_FILL",
-            fieldId: row.field.id,
+            fieldId: row.field.domId || row.field.id,
             value: row.value
-          }) as { ok?: boolean; message?: string };
+          }, { frameId: row.field.frameId ?? 0 }) as { ok?: boolean; message?: string };
 
           if (response?.ok) {
             filledIds.add(row.field.id);
