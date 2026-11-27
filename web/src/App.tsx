@@ -245,17 +245,23 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
   const refreshData = useCallback(async () => {
     setLoading(true);
     setError("");
-    const [documentResult, factResult, profileResult, applicationResult] = await Promise.all([
+    const [documentResult, factResult, profileResult, documentProfileResult, applicationResult] = await Promise.all([
       client.from("documents").select("*").order("created_at", { ascending: false }),
       client.from("extracted_facts").select("*").order("created_at", { ascending: false }).limit(300),
       client.from("profile_facts").select("*").order("fact_key", { ascending: true }),
+      client.from("document_profile_facts").select("*").order("fact_key", { ascending: true }),
       client.from("applications").select("*").order("created_at", { ascending: false })
     ]);
-    const firstError = documentResult.error || factResult.error || profileResult.error || applicationResult.error;
+    const firstError = documentResult.error || factResult.error || profileResult.error || documentProfileResult.error || applicationResult.error;
     if (firstError) setError(firstError.message);
     setDocuments((documentResult.data || []) as UserDocument[]);
     setFacts((factResult.data || []) as ExtractedFact[]);
-    setProfileFacts((profileResult.data || []) as ProfileFact[]);
+    const generalFacts = (profileResult.data || []) as ProfileFact[];
+    const documentFacts = (documentProfileResult.data || []).map((fact) => ({
+      ...fact,
+      source_document_id: fact.document_id
+    })) as ProfileFact[];
+    setProfileFacts([...generalFacts, ...documentFacts]);
     setApplications((applicationResult.data || []) as TrackedApplication[]);
     setLoading(false);
   }, [client]);
@@ -461,26 +467,28 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
   }
 
   async function approveFact(fact: ExtractedFact) {
-    const current = profileFacts.find((item) => item.fact_key === fact.fact_key);
+    const current = profileFacts.find((item) =>
+      item.fact_key === fact.fact_key && item.source_document_id === fact.document_id
+    );
     if (current && current.fact_value !== fact.fact_value) {
       const confirmed = window.confirm(
-        "Your profile currently stores \"" + current.fact_value + "\" for " + displayFactKey(fact.fact_key) +
-        ". Replace it with \"" + fact.fact_value + "\" from this document?"
+        "This document already has a saved value for " + displayFactKey(fact.fact_key) +
+        ". Replace \"" + current.fact_value + "\" with \"" + fact.fact_value + "\" from this document? General information and other documents will remain unchanged."
       );
       if (!confirmed) return;
     }
     clearNotice();
     setBusy(true);
     try {
-      const { error: saveError } = await client.from("profile_facts").upsert({
+      const { error: saveError } = await client.from("document_profile_facts").upsert({
         user_id: user.id,
+        document_id: fact.document_id,
         fact_key: fact.fact_key,
         fact_label: fact.fact_label || displayFactKey(fact.fact_key),
         fact_value: fact.fact_value,
-        source_document_id: fact.document_id,
         confidence: fact.confidence,
         verified: true
-      }, { onConflict: "user_id,fact_key" });
+      }, { onConflict: "user_id,document_id,fact_key" });
       if (saveError) throw saveError;
       const { error: reviewError } = await client.from("extracted_facts").update({ review_status: "approved" }).eq("id", fact.id);
       if (reviewError) throw reviewError;
@@ -495,12 +503,13 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
 
   async function approveSelectedFacts(selectedFacts: ExtractedFact[]) {
     if (selectedFacts.length === 0) return;
-    const uniqueByKey = new Map<string, ExtractedFact>();
+    const uniqueBySourceAndKey = new Map<string, ExtractedFact>();
     const conflictingKeys = new Set<string>();
     for (const fact of selectedFacts) {
-      const existing = uniqueByKey.get(fact.fact_key);
+      const identity = fact.document_id + "\u0000" + fact.fact_key;
+      const existing = uniqueBySourceAndKey.get(identity);
       if (existing && existing.fact_value !== fact.fact_value) conflictingKeys.add(fact.fact_key);
-      else if (!existing) uniqueByKey.set(fact.fact_key, fact);
+      else if (!existing) uniqueBySourceAndKey.set(identity, fact);
     }
     if (conflictingKeys.size > 0) {
       setError(
@@ -512,12 +521,14 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
     }
 
     const replacements = Array.from(uniqueByKey.values()).filter((fact) => {
-      const current = profileFacts.find((item) => item.fact_key === fact.fact_key);
+      const current = profileFacts.find((item) =>
+        item.fact_key === fact.fact_key && item.source_document_id === fact.document_id
+      );
       return current && current.fact_value !== fact.fact_value;
     });
     if (replacements.length > 0) {
       const summary = replacements.slice(0, 6).map((fact) =>
-        displayFactKey(fact.fact_key) + ": " + fact.fact_value
+        displayFactKey(fact.fact_key) + " (" + fact.document_id.slice(0, 8) + "): " + fact.fact_value
       ).join("\n");
       const more = replacements.length > 6 ? "\n…and " + (replacements.length - 6) + " more" : "";
       if (!window.confirm(
@@ -528,16 +539,19 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
     clearNotice();
     setBusy(true);
     try {
-      const profileRows = Array.from(uniqueByKey.values()).map((fact) => ({
+      const documentRows = Array.from(uniqueBySourceAndKey.values()).map((fact) => ({
         user_id: user.id,
+        document_id: fact.document_id,
         fact_key: fact.fact_key,
         fact_label: fact.fact_label || displayFactKey(fact.fact_key),
         fact_value: fact.fact_value,
-        source_document_id: fact.document_id,
         confidence: fact.confidence,
         verified: true
       }));
-      const { error: saveError } = await client.from("profile_facts").upsert(profileRows, { onConflict: "user_id,fact_key" });
+      const { error: saveError } = await client.from("document_profile_facts").upsert(
+        documentRows,
+        { onConflict: "user_id,document_id,fact_key" }
+      );
       if (saveError) throw saveError;
 
       const selectedIds = selectedFacts.map((fact) => fact.id);
@@ -550,7 +564,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         throw new Error("Profile values were saved, but their review status could not be updated. Refresh and check the profile before retrying.");
       }
 
-      setMessage("Saved " + uniqueByKey.size + " selected value(s) to your reviewed profile. The extension can now search these saved facts without re-reading the documents.");
+      setMessage("Saved " + uniqueBySourceAndKey.size + " document-specific value(s). General information and facts from other documents remain separate.");
       await refreshData();
     } catch (reason) {
       setError(messageFor(reason));
@@ -563,7 +577,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
   async function saveManualFact(factKey: string, value: string) {
     const cleanValue = value.trim().replace(/\\s{2,}/g, " ");
     if (!cleanValue) throw new Error("Enter a value before saving.");
-    const current = profileFacts.find((item) => item.fact_key === factKey);
+    const current = profileFacts.find((item) => item.fact_key === factKey && item.source_document_id === null);
     if (current && current.fact_value !== cleanValue) {
       const confirmed = window.confirm(
         "Replace the saved " + displayFactKey(factKey) + " value with the new value?"
