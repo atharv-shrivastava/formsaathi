@@ -401,10 +401,27 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
       };
       if (!response.ok) throw new Error(payload.error || ("OCR service returned HTTP " + response.status + ". Check the backend route and Render logs."));
       const extracted = Array.isArray(payload.facts) ? payload.facts : [];
-      const { error: clearError } = await client.from("extracted_facts").delete().eq("document_id", document.id);
+      const { data: reviewedForDocument, error: reviewedLookupError } = await client
+        .from("extracted_facts")
+        .select("fact_key,fact_value")
+        .eq("document_id", document.id)
+        .neq("review_status", "pending");
+      if (reviewedLookupError) throw reviewedLookupError;
+      const alreadyReviewed = new Set(
+        (reviewedForDocument || []).map((fact) => fact.fact_key + "\\u0000" + fact.fact_value)
+      );
+      const { error: clearError } = await client
+        .from("extracted_facts")
+        .delete()
+        .eq("document_id", document.id)
+        .eq("review_status", "pending");
       if (clearError) throw clearError;
-      if (extracted.length) {
-        const rows = extracted.map((fact: { key: string; label?: string; value: string; confidence?: number; evidence?: string }) => ({
+
+      const freshCandidates = extracted.filter((fact) =>
+        !alreadyReviewed.has(fact.key + "\\u0000" + fact.value)
+      );
+      if (freshCandidates.length) {
+        const rows = freshCandidates.map((fact: { key: string; label?: string; value: string; confidence?: number; evidence?: string }) => ({
           user_id: user.id,
           document_id: document.id,
           fact_key: fact.key,
@@ -422,11 +439,13 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         document_type: payload.documentType || document.document_type || null
       }).eq("id", document.id);
       if (statusError) throw statusError;
-      setMessage(extracted.length
-        ? (payload.aiExtractionUsed ? "AI detected " : "OCR detected ") + extracted.length + " field(s)" +
+      setMessage(freshCandidates.length
+        ? (payload.aiExtractionUsed ? "AI detected " : "OCR detected ") + freshCandidates.length + " new field(s)" +
           (payload.documentType ? " in this " + payload.documentType : " in this document") +
           ". Select the values you want to save to your profile."
-        : (payload.note || "OCR completed, but no fields were confidently detected. Review the original document or enter the information manually."));
+        : (extracted.length
+          ? "Extraction finished. Existing approved or dismissed values were kept; no new candidates need review."
+          : (payload.note || "OCR completed, but no fields were confidently detected. Review the original document or enter the information manually.")));
       await refreshData();
     } catch (reason) {
       const detail = messageFor(reason);
