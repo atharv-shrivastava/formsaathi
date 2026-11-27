@@ -105,9 +105,10 @@ export function canonicalFieldKey(field: PortalField): string | null {
   if (autocomplete && autocompleteMap[autocomplete]) return autocompleteMap[autocomplete];
 
   const label = normalizeText(field.label);
-  const roleContext = normalizeText([field.label, field.name, field.placeholder, field.nearbyText].join(" "));
-  // Avoid treating a parent's first/last name as the applicant's name parts.
-  const parentRole = /\b(father|mother|guardian|parent)\b/.test(roleContext);
+  const fieldIdentity = normalizeText([field.label, field.name, field.placeholder, field.autocomplete].join(" "));
+  // A field explicitly labelled as a parent's first/last name is not an applicant name field.
+  const parentRole = /\b(father|mother|guardian|parent)\b/.test(fieldIdentity);
+  if (parentRole && /\b(first|given|last|family|surname)\s+name\b/.test(fieldIdentity)) return null;
   const searchable = normalizeText([
     field.label,
     field.name,
@@ -164,7 +165,7 @@ export function retrieveRelevantDocuments(fields: PortalField[], documents: Stor
 }
 
 function isApplicantFullNameFact(fact: CandidateFact): boolean {
-  return ["applicant_name", "full_name", "student_name", "candidate_name", "applicant_full_name", "name_of_applicant"].includes(
+  return ["applicant_name", "full_name", "student_name", "student_full_name", "candidate_name", "candidate_full_name", "beneficiary_name", "applicant_full_name", "name_of_applicant", "full_name_of_applicant"].includes(
     normalizeText(fact.key).replace(/ /g, "_")
   );
 }
