@@ -128,7 +128,7 @@ function semanticCompatibility(fieldKind, factKind) {
 }
 
 const applicantFullNameKeys = new Set([
-  "applicant_name", "full_name", "student_name", "candidate_name", "name_of_applicant"
+  "applicant_name", "applicant_full_name", "full_name", "student_name", "candidate_name", "name_of_applicant"
 ]);
 
 function splitApplicantName(value) {
