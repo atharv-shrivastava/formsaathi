@@ -5,6 +5,7 @@ import multer from "multer";
 import { createClient } from "@supabase/supabase-js";
 import sharp from "sharp";
 import { processDocument } from "./ocr.js";
+import { buildDocumentExtractionPrompt, mergeDocumentFacts, validateDocumentExtraction } from "./document-extraction.js";
 import { prepareImage } from "./prepare.js";
 import { filterRelevantProfileFacts, sanitizeDetectedFields, validateAiMappings } from "./form-analysis.js";
 import { buildImageOverlaySvg, buildPaperFormFields, validatePaperPlacements } from "./paper-form.js";
@@ -204,10 +205,66 @@ app.post(
     ocrBusy = true;
     try {
       const result = await processDocument(request.file);
+      let documentType = null;
+      let facts = result.facts || [];
+      let aiExtractionUsed = false;
+      let extractionNote = "Only pattern-based fields were detected. Review the original document for additional information.";
+
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (apiKey && result.text.trim()) {
+        try {
+          const parsed = await callGeminiJson({
+            apiKey,
+            model: getGeminiModel(),
+            contents: [{
+              role: "user",
+              parts: [{ text: buildDocumentExtractionPrompt(result.text) }]
+            }],
+            responseSchema: {
+              type: "OBJECT",
+              properties: {
+                documentType: { type: "STRING" },
+                facts: {
+                  type: "ARRAY",
+                  items: {
+                    type: "OBJECT",
+                    properties: {
+                      key: { type: "STRING" },
+                      label: { type: "STRING" },
+                      value: { type: "STRING" },
+                      confidence: { type: "NUMBER" },
+                      evidence: { type: "STRING" }
+                    },
+                    required: ["key", "label", "value", "confidence", "evidence"]
+                  }
+                }
+              },
+              required: ["documentType", "facts"]
+            },
+            maxOutputTokens: 8192
+          });
+          const validated = validateDocumentExtraction(parsed, result.text);
+          documentType = validated.documentType;
+          facts = mergeDocumentFacts(validated.facts, result.facts);
+          aiExtractionUsed = true;
+          extractionNote = "AI extracted labelled fields across this document. Every candidate is unverified until you select and approve it.";
+        } catch (extractionError) {
+          console.warn(
+            "Gemini document extraction failed; using conservative OCR patterns:",
+            extractionError instanceof Error ? extractionError.message : extractionError
+          );
+          extractionNote = "AI field extraction was unavailable, so only a limited set of pattern-matched fields was detected. Retry later or review the document manually.";
+        }
+      } else if (!apiKey) {
+        extractionNote = "Gemini is not configured on the backend. Only a limited set of pattern-matched fields was detected.";
+      }
+
       response.json({
         text: result.text,
-        facts: result.facts,
-        note: "OCR output is unverified. Check every value against the original document."
+        facts,
+        documentType,
+        aiExtractionUsed,
+        note: extractionNote
       });
     } catch (error) {
       response.status(422).json({ error: error instanceof Error ? error.message : "OCR processing failed." });
@@ -253,7 +310,7 @@ async function loadVerifiedProfileFacts(accessToken) {
   const userClient = createUserScopedClient(accessToken);
   const { data, error } = await userClient
     .from("profile_facts")
-    .select("id,fact_key,fact_value,source_document_id,confidence,updated_at")
+    .select("id,fact_key,fact_label,fact_value,source_document_id,confidence,updated_at")
     .eq("verified", true)
     .order("updated_at", { ascending: false })
     .limit(120);
@@ -346,6 +403,7 @@ app.post(
         "Detected fields: " + JSON.stringify(fields),
         "Verified facts: " + JSON.stringify(relevantFacts.map((fact) => ({
           fact_key: fact.fact_key,
+          fact_label: fact.fact_label,
           fact_value: fact.fact_value
         })))
       ].join("\n");

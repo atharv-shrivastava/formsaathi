@@ -440,3 +440,31 @@ code { padding: 2px 5px; border-radius: 5px; background: #f0f3f8; color: #3c5279
   .manual-profile-grid { grid-template-columns: minmax(0,1fr); }
   .manual-profile-card { padding: 17px; }
 }
+
+
+/* Document-scoped extraction review and multi-select approval */
+.review-section>.section-head .muted{margin:6px 0 0;color:#8492a7;font-size:10px;line-height:1.55}
+.review-bulk-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:15px;padding:11px 12px;border:1px solid #e8edf5;border-radius:10px;background:#fafbfd}
+.candidate-select-all,.candidate-select{display:inline-flex;align-items:center;gap:7px;color:#687991;font-size:9px;font-weight:700;cursor:pointer}
+.candidate-select-all input,.candidate-select input{width:14px;height:14px;margin:0;accent-color:#496fc9}
+.candidate-bulk-save{min-height:34px;padding:0 12px;font-size:9px}
+.candidate-document-groups{display:grid;gap:13px;margin-top:14px}
+.candidate-document-group{min-width:0;padding:13px 15px;border:1px solid #e9edf4;border-radius:11px;background:#fff}
+.candidate-document-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:10px;border-bottom:1px solid #edf0f5}
+.candidate-document-heading>div{display:grid;min-width:0;gap:4px}
+.candidate-document-heading strong{overflow:hidden;color:#40516b;font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.candidate-document-heading small{color:#9aa6b5;font-size:9px}
+.candidate-document-group .candidate-list{margin-top:0}
+.candidate-select{flex:0 0 auto;align-self:center}
+.candidate-select span{font-size:8px;font-weight:600}
+.candidate-document-group .candidate-row{align-items:flex-start;gap:12px}
+.candidate-document-group .candidate-main{padding-top:2px}
+@media(max-width:680px){
+  .review-bulk-toolbar{align-items:stretch;flex-direction:column}
+  .candidate-bulk-save{width:100%}
+  .candidate-document-group{padding:11px}
+  .candidate-document-heading{align-items:flex-start;flex-direction:column}
+  .candidate-document-group .candidate-row{align-items:stretch;flex-wrap:wrap;gap:9px}
+  .candidate-document-group .candidate-main{flex:1 1 calc(100% - 70px)}
+  .candidate-document-group .candidate-actions{width:100%;display:flex;justify-content:flex-start;flex-wrap:wrap;align-items:center}
+}

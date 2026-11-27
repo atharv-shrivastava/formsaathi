@@ -321,8 +321,21 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         await client.storage.from("formsaathi-documents").remove([storagePath]);
         throw insertError;
       }
-      setMessage(file.name + " uploaded to your private document vault.");
+      const uploadedDocument: UserDocument = {
+        id,
+        user_id: user.id,
+        filename: file.name,
+        category: uploadCategory,
+        document_type: null,
+        mime_type: file.type,
+        size_bytes: file.size,
+        storage_path: storagePath,
+        status: "uploaded",
+        created_at: new Date().toISOString()
+      };
+      setMessage(file.name + " uploaded. FormSaathi will now ask permission to extract its labelled fields.");
       await refreshData();
+      await runOcr(uploadedDocument);
     } catch (reason) {
       setError(messageFor(reason));
     } finally {
@@ -359,6 +372,10 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
   }
 
   async function runOcr(document: UserDocument) {
+    const consent = window.confirm(
+      "FormSaathi will send this document to its hosted OCR processor. Its extracted text may then be sent to Google Gemini for broad field detection, including personal or sensitive information. The detected values will remain pending until you choose which ones to save. Continue?"
+    );
+    if (!consent) return;
     clearNotice();
     setBusyDocument(document.id);
     try {
@@ -376,18 +393,39 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         body: form
       });
       const payload = await response.json().catch(() => ({})) as {
-        facts?: Array<{ key: string; value: string; confidence?: number; evidence?: string }>;
+        facts?: Array<{ key: string; label?: string; value: string; confidence?: number; evidence?: string }>;
+        documentType?: string | null;
+        aiExtractionUsed?: boolean;
+        note?: string;
         error?: string;
       };
       if (!response.ok) throw new Error(payload.error || ("OCR service returned HTTP " + response.status + ". Check the backend route and Render logs."));
       const extracted = Array.isArray(payload.facts) ? payload.facts : [];
-      const { error: clearError } = await client.from("extracted_facts").delete().eq("document_id", document.id);
+      const { data: reviewedForDocument, error: reviewedLookupError } = await client
+        .from("extracted_facts")
+        .select("fact_key,fact_value")
+        .eq("document_id", document.id)
+        .neq("review_status", "pending");
+      if (reviewedLookupError) throw reviewedLookupError;
+      const alreadyReviewed = new Set(
+        (reviewedForDocument || []).map((fact) => fact.fact_key + "\u0000" + fact.fact_value)
+      );
+      const { error: clearError } = await client
+        .from("extracted_facts")
+        .delete()
+        .eq("document_id", document.id)
+        .eq("review_status", "pending");
       if (clearError) throw clearError;
-      if (extracted.length) {
-        const rows = extracted.map((fact: { key: string; value: string; confidence?: number; evidence?: string }) => ({
+
+      const freshCandidates = extracted.filter((fact) =>
+        !alreadyReviewed.has(fact.key + "\u0000" + fact.value)
+      );
+      if (freshCandidates.length) {
+        const rows = freshCandidates.map((fact: { key: string; label?: string; value: string; confidence?: number; evidence?: string }) => ({
           user_id: user.id,
           document_id: document.id,
           fact_key: fact.key,
+          fact_label: fact.label || fact.key.replace(/_/g, " "),
           fact_value: fact.value,
           confidence: Number.isFinite(fact.confidence) ? fact.confidence : null,
           evidence: fact.evidence || null,
@@ -396,11 +434,18 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         const { error: insertError } = await client.from("extracted_facts").insert(rows);
         if (insertError) throw insertError;
       }
-      const { error: statusError } = await client.from("documents").update({ status: "extracted" }).eq("id", document.id);
+      const { error: statusError } = await client.from("documents").update({
+        status: "extracted",
+        document_type: payload.documentType || document.document_type || null
+      }).eq("id", document.id);
       if (statusError) throw statusError;
-      setMessage(extracted.length
-        ? "OCR found " + extracted.length + " candidate value(s). Review them before adding anything to your profile."
-        : "OCR completed, but no recognised fields matched the current extraction rules. The original document is unchanged.");
+      setMessage(freshCandidates.length
+        ? (payload.aiExtractionUsed ? "AI detected " : "OCR detected ") + freshCandidates.length + " new field(s)" +
+          (payload.documentType ? " in this " + payload.documentType : " in this document") +
+          ". Select the values you want to save to your profile."
+        : (extracted.length
+          ? "Extraction finished. Existing approved or dismissed values were kept; no new candidates need review."
+          : (payload.note || "OCR completed, but no fields were confidently detected. Review the original document or enter the information manually.")));
       await refreshData();
     } catch (reason) {
       const detail = messageFor(reason);
@@ -428,6 +473,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
       const { error: saveError } = await client.from("profile_facts").upsert({
         user_id: user.id,
         fact_key: fact.fact_key,
+        fact_label: fact.fact_label || displayFactKey(fact.fact_key),
         fact_value: fact.fact_value,
         source_document_id: fact.document_id,
         confidence: fact.confidence,
@@ -440,6 +486,73 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
       await refreshData();
     } catch (reason) {
       setError(messageFor(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approveSelectedFacts(selectedFacts: ExtractedFact[]) {
+    if (selectedFacts.length === 0) return;
+    const uniqueByKey = new Map<string, ExtractedFact>();
+    const conflictingKeys = new Set<string>();
+    for (const fact of selectedFacts) {
+      const existing = uniqueByKey.get(fact.fact_key);
+      if (existing && existing.fact_value !== fact.fact_value) conflictingKeys.add(fact.fact_key);
+      else if (!existing) uniqueByKey.set(fact.fact_key, fact);
+    }
+    if (conflictingKeys.size > 0) {
+      setError(
+        "You selected different values for the same profile field: " +
+        Array.from(conflictingKeys).map(displayFactKey).join(", ") +
+        ". Choose one value for each field, then save the selection again."
+      );
+      return;
+    }
+
+    const replacements = Array.from(uniqueByKey.values()).filter((fact) => {
+      const current = profileFacts.find((item) => item.fact_key === fact.fact_key);
+      return current && current.fact_value !== fact.fact_value;
+    });
+    if (replacements.length > 0) {
+      const summary = replacements.slice(0, 6).map((fact) =>
+        displayFactKey(fact.fact_key) + ": " + fact.fact_value
+      ).join("\n");
+      const more = replacements.length > 6 ? "\n…and " + (replacements.length - 6) + " more" : "";
+      if (!window.confirm(
+        "These selected values will replace existing profile values:\n\n" + summary + more + "\n\nContinue?"
+      )) return;
+    }
+
+    clearNotice();
+    setBusy(true);
+    try {
+      const profileRows = Array.from(uniqueByKey.values()).map((fact) => ({
+        user_id: user.id,
+        fact_key: fact.fact_key,
+        fact_label: fact.fact_label || displayFactKey(fact.fact_key),
+        fact_value: fact.fact_value,
+        source_document_id: fact.document_id,
+        confidence: fact.confidence,
+        verified: true
+      }));
+      const { error: saveError } = await client.from("profile_facts").upsert(profileRows, { onConflict: "user_id,fact_key" });
+      if (saveError) throw saveError;
+
+      const selectedIds = selectedFacts.map((fact) => fact.id);
+      const { error: reviewError } = await client
+        .from("extracted_facts")
+        .update({ review_status: "approved" })
+        .in("id", selectedIds)
+        .eq("review_status", "pending");
+      if (reviewError) {
+        throw new Error("Profile values were saved, but their review status could not be updated. Refresh and check the profile before retrying.");
+      }
+
+      setMessage("Saved " + uniqueByKey.size + " selected value(s) to your reviewed profile. The extension can now search these saved facts without re-reading the documents.");
+      await refreshData();
+    } catch (reason) {
+      setError(messageFor(reason));
+      await refreshData();
     } finally {
       setBusy(false);
     }
@@ -461,6 +574,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
       const { error: saveError } = await client.from("profile_facts").upsert({
         user_id: user.id,
         fact_key: factKey,
+        fact_label: displayFactKey(factKey),
         fact_value: cleanValue,
         source_document_id: null,
         confidence: 1,
@@ -497,7 +611,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         .maybeSingle();
       if (updateError) throw updateError;
       if (!data) throw new Error("This candidate is no longer pending. Refresh the page and try again.");
-      setMessage(displayFactKey(fact.fact_key) + " updated. Review it before approving.");
+      setMessage((fact.fact_label || displayFactKey(fact.fact_key)) + " updated. Review it before approving.");
       await refreshData();
     } catch (reason) {
       setError(messageFor(reason));
@@ -655,6 +769,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
                   pendingFacts={pendingFacts}
                   documents={documents}
                   onApprove={approveFact}
+                  onApproveSelected={approveSelectedFacts}
                   onReject={rejectFact}
                   onUpdate={updateFactValue}
                   onManualSave={saveManualFact}
@@ -768,16 +883,16 @@ function DocumentsPage({
   return (
     <div className="page-content">
       <section className="surface-card upload-card">
-        <div className="upload-main"><div className="upload-copy"><div className="upload-symbol">＋</div><div><h3>Add a document</h3><p>PDF, JPG, PNG or WebP · Up to 10 MB per file</p></div></div><label className="cloud-consent"><input type="checkbox" checked={cloudConsent} onChange={(event) => onCloudConsentChange(event.target.checked)} /><span>I understand this uploads a copy to my private FormSaathi cloud vault. I will use synthetic documents for this MVP demo.</span></label></div>
-        <div className="upload-controls"><label className="category-picker"><span>Document type</span><select value={category} onChange={(event) => onCategoryChange(event.target.value as DocumentCategory)}>{categoryOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label className={!cloudConsent || busy ? "button primary disabled" : "button primary"}>Choose file<input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" onChange={onUpload} disabled={!cloudConsent || busy} hidden /></label></div>
+        <div className="upload-main"><div className="upload-copy"><div className="upload-symbol">＋</div><div><h3>Add a document</h3><p>PDF, JPG, PNG or WebP · Up to 10 MB. Any document category can be processed.</p></div></div><label className="cloud-consent"><input type="checkbox" checked={cloudConsent} onChange={(event) => onCloudConsentChange(event.target.checked)} /><span>I understand this uploads a copy to my private FormSaathi cloud vault. I will use synthetic documents for this MVP demo.</span></label></div>
+        <div className="upload-controls"><label className="category-picker"><span>Vault category (for organisation only)</span><select value={category} onChange={(event) => onCategoryChange(event.target.value as DocumentCategory)}>{categoryOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label className={!cloudConsent || busy ? "button primary disabled" : "button primary"}>Choose file<input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" onChange={onUpload} disabled={!cloudConsent || busy} hidden /></label></div>
       </section>
       <div className="section-head document-list-head"><div><p className="eyebrow">YOUR PRIVATE STORAGE</p><h3>Uploaded documents <span className="inline-count">{documents.length}</span></h3></div><span className="vault-label">⌑ Private vault</span></div>
-      {documents.length === 0 ? <section className="surface-card empty-large"><div className="empty-illustration">▤</div><h3>No documents yet</h3><p>Upload a document and choose the closest category. You can change it later.</p></section> : (
+      {documents.length === 0 ? <section className="surface-card empty-large"><div className="empty-illustration">▤</div><h3>No documents yet</h3><p>Upload any supported document. FormSaathi detects its type and extracts labelled fields regardless of the selected vault category.</p></section> : (
         <div className="document-table surface-card">
           <div className="table-heading"><span>DOCUMENT</span><span>CATEGORY</span><span>ADDED</span><span>STATUS</span><span>ACTIONS</span></div>
           {documents.map((document) => (
             <div className="document-row" key={document.id}>
-              <div className="document-name"><div className="file-icon">{document.mime_type === "application/pdf" ? "PDF" : "IMG"}</div><div><strong>{document.filename}</strong><small>{formatBytes(document.size_bytes)}</small></div></div>
+              <div className="document-name"><div className="file-icon">{document.mime_type === "application/pdf" ? "PDF" : "IMG"}</div><div><strong>{document.filename}</strong><small>{document.document_type ? "Detected: " + document.document_type : formatBytes(document.size_bytes)}</small></div></div>
               <div><select className="table-select" value={document.category} onChange={(event) => onUpdateCategory(document, event.target.value as DocumentCategory)}>{categoryOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
               <span className="table-date">{formatDate(document.created_at)}</span>
               <span className={"status-chip status-" + document.status}>{document.status === "extracted" ? "Extracted" : document.status === "failed" ? "Retry needed" : "Uploaded"}</span>
@@ -786,16 +901,17 @@ function DocumentsPage({
           ))}
         </div>
       )}
-      <p className="inline-note"><span>ⓘ</span> Uploading stores the original file in your private vault. When you click Run OCR, that selected file is sent over HTTPS to FormSaathi's hosted OCR processor; the processor handles it in memory and does not save it to its own disk. Extracted values remain unverified until you approve them.</p>
+      <p className="inline-note"><span>ⓘ</span> Uploading stores the original file in your private vault. When you click Run OCR, FormSaathi asks separately before sending the file to its hosted OCR processor and using Gemini to detect labelled fields. Extracted candidates are linked to this document and are not available to the extension until you select and approve them.</p>
     </div>
   );
 }
 
-function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onReject, onUpdate, onManualSave, busy }: {
+function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onApproveSelected, onReject, onUpdate, onManualSave, busy }: {
   verifiedFacts: ProfileFact[];
   pendingFacts: ExtractedFact[];
   documents: UserDocument[];
   onApprove: (fact: ExtractedFact) => void;
+  onApproveSelected: (facts: ExtractedFact[]) => void;
   onReject: (fact: ExtractedFact) => void;
   onUpdate: (fact: ExtractedFact, value: string) => void;
   onManualSave: (factKey: string, value: string) => Promise<void>;
@@ -805,7 +921,28 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onReje
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
   const [manualValues, setManualValues] = useState<Record<string, string>>({});
   const [manualError, setManualError] = useState("");
-  const docName = (id: string) => documents.find((document) => document.id === id)?.filename || "Source document";
+  const [selectedFactIds, setSelectedFactIds] = useState<string[]>([]);
+  useEffect(() => {
+    const currentPendingIds = new Set(pendingFacts.map((fact) => fact.id));
+    setSelectedFactIds((current) => current.filter((id) => currentPendingIds.has(id)));
+  }, [pendingFacts]);
+  const docFor = (id: string) => documents.find((document) => document.id === id);
+  const docName = (id: string) => docFor(id)?.filename || "Source document";
+  const pendingGroups = pendingFacts.reduce<Record<string, ExtractedFact[]>>((groups, fact) => {
+    (groups[fact.document_id] ||= []).push(fact);
+    return groups;
+  }, {});
+  function toggleFact(id: string, checked: boolean) {
+    setSelectedFactIds((current) => checked
+      ? Array.from(new Set([...current, id]))
+      : current.filter((item) => item !== id));
+  }
+  function toggleDocumentGroup(facts: ExtractedFact[], checked: boolean) {
+    const ids = facts.map((fact) => fact.id);
+    setSelectedFactIds((current) => checked
+      ? Array.from(new Set([...current, ...ids]))
+      : current.filter((id) => !ids.includes(id)));
+  }
   const manualFields = [
     { key: "applicant_name", label: "Applicant name", type: "text" },
     { key: "father_name", label: "Father's name", type: "text" },
@@ -867,49 +1004,89 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onReje
         <div className="section-head"><div><p className="eyebrow">SAVED INFORMATION</p><h3>Reviewed profile</h3></div><span className="soft-badge">{verifiedFacts.length} fields</span></div>
         {verifiedFacts.length === 0 ? <EmptyState title="Nothing verified yet" text="Enter information manually above or run OCR on a document and approve the values you want to save here." /> : (
           <div className="fact-grid">{verifiedFacts.map((fact) => (
-            <div className="fact-card" key={fact.id}><div className="fact-label">{displayFactKey(fact.fact_key)} <span className="verified-dot">✓ Reviewed</span></div><strong>{fact.fact_value}</strong><small>Source: {fact.source_document_id ? docName(fact.source_document_id) : "Manually added"}</small></div>
+            <div className="fact-card" key={fact.id}><div className="fact-label">{fact.fact_label || displayFactKey(fact.fact_key)} <span className="verified-dot">✓ Reviewed</span></div><strong>{fact.fact_value}</strong><small>Source: {fact.source_document_id ? docName(fact.source_document_id) : "Manually added"}</small></div>
           ))}</div>
         )}
       </section>
       <section className="surface-card review-section">
-        <div className="section-head"><div><p className="eyebrow">NEEDS YOUR DECISION</p><h3>Extracted candidates</h3></div><span className={pendingFacts.length ? "review-count active" : "review-count"}>{pendingFacts.length} pending</span></div>
+        <div className="section-head"><div><p className="eyebrow">NEEDS YOUR DECISION</p><h3>Extracted candidates</h3><p className="muted">Fields stay attached to their source document until you choose which values belong in your reusable profile.</p></div><span className={pendingFacts.length ? "review-count active" : "review-count"}>{pendingFacts.length} pending</span></div>
         {pendingFacts.length === 0 ? <EmptyState title="You're all caught up" text="New OCR results will appear here for your review." /> : (
-          <div className="candidate-list">{pendingFacts.map((fact) => {
-            const isEditing = editingFactId === fact.id;
-            const draft = draftValues[fact.id] ?? fact.fact_value;
-            return (
-              <article className="candidate-row" key={fact.id}>
-                <div className="candidate-main">
-                  <div className="candidate-label">{displayFactKey(fact.fact_key)}</div>
-                  {isEditing ? (
-                    <input
-                      className="candidate-edit-input"
-                      aria-label={"Edit " + displayFactKey(fact.fact_key)}
-                      value={draft}
-                      onChange={(event) => setDraftValues((current) => ({ ...current, [fact.id]: event.target.value }))}
-                      autoFocus
-                    />
-                  ) : <strong>{fact.fact_value}</strong>}
-                  <small>{docName(fact.document_id)}{fact.confidence !== null ? " · extraction heuristic " + Math.round(fact.confidence * 100) + "%" : ""}</small>
-                  {fact.evidence && <p className="evidence">“{fact.evidence}”</p>}
-                </div>
-                <div className="candidate-actions">
-                  {isEditing ? (
-                    <>
-                      <button className="button primary candidate-save" disabled={busy || !draft.trim()} onClick={() => { onUpdate(fact, draft); setEditingFactId(null); }}>Save edit</button>
-                      <button className="text-button reject-button" disabled={busy} onClick={() => setEditingFactId(null)}>Cancel</button>
-                    </>
-                  ) : (
-                    <>
-                      <button className="text-button edit-button" disabled={busy} onClick={() => { setDraftValues((current) => ({ ...current, [fact.id]: fact.fact_value })); setEditingFactId(fact.id); }}>Edit</button>
-                      <button className="button approve-button" disabled={busy} onClick={() => onApprove(fact)}>✓ Use this value</button>
-                      <button className="text-button reject-button" disabled={busy} onClick={() => onReject(fact)}>Dismiss</button>
-                    </>
-                  )}
-                </div>
-              </article>
-            );
-          })}</div>
+          <>
+            <div className="review-bulk-toolbar">
+              <label className="candidate-select-all"><input
+                type="checkbox"
+                checked={pendingFacts.length > 0 && pendingFacts.every((fact) => selectedFactIds.includes(fact.id))}
+                onChange={(event) => setSelectedFactIds(event.target.checked ? pendingFacts.map((fact) => fact.id) : [])}
+                disabled={busy}
+              /><span>Select all detected fields</span></label>
+              <button className="button primary candidate-bulk-save" disabled={busy || selectedFactIds.length === 0} onClick={() => onApproveSelected(pendingFacts.filter((fact) => selectedFactIds.includes(fact.id)))}>
+                Save {selectedFactIds.length ? selectedFactIds.length + " selected" : "selected"} to profile
+              </button>
+            </div>
+            <div className="candidate-document-groups">
+              {Object.entries(pendingGroups).map(([documentId, groupFacts]) => {
+                const source = docFor(documentId);
+                const selectedCount = groupFacts.filter((fact) => selectedFactIds.includes(fact.id)).length;
+                const allSelected = selectedCount === groupFacts.length;
+                return (
+                  <section className="candidate-document-group" key={documentId}>
+                    <div className="candidate-document-heading">
+                      <div><strong>{source?.document_type || source?.filename || "Source document"}</strong><small>{source?.filename || "Document"} · {groupFacts.length} detected field(s)</small></div>
+                      <label className="candidate-select-all"><input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={(event) => toggleDocumentGroup(groupFacts, event.target.checked)}
+                        disabled={busy}
+                      /><span>{allSelected ? "Selected" : "Select document"}</span></label>
+                    </div>
+                    <div className="candidate-list">
+                      {groupFacts.map((fact) => {
+                        const isEditing = editingFactId === fact.id;
+                        const draft = draftValues[fact.id] ?? fact.fact_value;
+                        const fieldLabel = fact.fact_label || displayFactKey(fact.fact_key);
+                        return (
+                          <article className="candidate-row" key={fact.id}>
+                            <label className="candidate-select">
+                              <input type="checkbox" checked={selectedFactIds.includes(fact.id)} onChange={(event) => toggleFact(fact.id, event.target.checked)} disabled={busy} />
+                              <span>Select</span>
+                            </label>
+                            <div className="candidate-main">
+                              <div className="candidate-label">{fieldLabel}</div>
+                              {isEditing ? (
+                                <input
+                                  className="candidate-edit-input"
+                                  aria-label={"Edit " + fieldLabel}
+                                  value={draft}
+                                  onChange={(event) => setDraftValues((current) => ({ ...current, [fact.id]: event.target.value }))}
+                                  autoFocus
+                                />
+                              ) : <strong>{fact.fact_value}</strong>}
+                              <small>{fact.confidence !== null ? "Extraction confidence " + Math.round(fact.confidence * 100) + "%" : "Confidence unavailable"}</small>
+                              {fact.evidence && <p className="evidence">“{fact.evidence}”</p>}
+                            </div>
+                            <div className="candidate-actions">
+                              {isEditing ? (
+                                <>
+                                  <button className="button primary candidate-save" disabled={busy || !draft.trim()} onClick={() => { onUpdate(fact, draft); setEditingFactId(null); }}>Save edit</button>
+                                  <button className="text-button reject-button" disabled={busy} onClick={() => setEditingFactId(null)}>Cancel</button>
+                                </>
+                              ) : (
+                                <>
+                                  <button className="text-button edit-button" disabled={busy} onClick={() => { setDraftValues((current) => ({ ...current, [fact.id]: fact.fact_value })); setEditingFactId(fact.id); }}>Edit</button>
+                                  <button className="button approve-button" disabled={busy} onClick={() => onApprove(fact)}>Use this value</button>
+                                  <button className="text-button reject-button" disabled={busy} onClick={() => { toggleFact(fact.id, false); onReject(fact); }}>Dismiss</button>
+                                </>
+                              )}
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          </>
         )}
       </section>
       <p className="inline-note"><span>ⓘ</span> You can edit OCR candidates before approving them. OCR confidence is a technical estimate, not proof that a value is correct. Always compare it with the original document.</p>

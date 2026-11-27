@@ -15,6 +15,7 @@ export interface UserDocument {
   id: string;
   user_id: string;
   filename: string;
+  document_type: string | null;
   category: DocumentCategory;
   mime_type: string;
   size_bytes: number;
@@ -28,6 +29,7 @@ export interface ExtractedFact {
   user_id: string;
   document_id: string;
   fact_key: string;
+  fact_label: string | null;
   fact_value: string;
   confidence: number | null;
   evidence: string | null;
@@ -39,6 +41,7 @@ export interface ProfileFact {
   id: string;
   user_id: string;
   fact_key: string;
+  fact_label: string | null;
   fact_value: string;
   source_document_id: string | null;
   confidence: number | null;
