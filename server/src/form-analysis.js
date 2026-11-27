@@ -41,16 +41,22 @@ function matchesFactToField(field, fact) {
   const fieldText = fieldSearchText(field);
   const key = String(fact.fact_key || "").trim();
   const normalizedKey = normalize(key.replace(/_/g, " "));
+  const factLabel = normalize(fact.fact_label || "");
   const aliases = factAliases[key] || [];
   if (!fieldText || !key) return false;
   if (["applicant_name", "full_name"].includes(key) && fieldText === "name") return true;
   if (aliases.some((alias) => fieldText.includes(normalize(alias)))) return true;
+  if (factLabel && (fieldText === factLabel || fieldText.includes(factLabel) || factLabel.includes(fieldText))) return true;
   if (normalizedKey && (fieldText === normalizedKey || fieldText.includes(normalizedKey))) return true;
 
-  const tokens = key.split("_")
+  const fieldTokens = new Set(fieldText.split(" "));
+  const keyTokens = key.split("_")
     .map(normalize)
     .filter((token) => token.length >= 3 && !stopWords.has(token));
-  return tokens.length > 0 && tokens.every((token) => fieldText.split(" ").includes(token));
+  const labelTokens = factLabel.split(" ")
+    .filter((token) => token.length >= 3 && !stopWords.has(token));
+  const tokens = labelTokens.length ? labelTokens : keyTokens;
+  return tokens.length > 0 && tokens.every((token) => fieldTokens.has(token));
 }
 
 export function sanitizeDetectedFields(rawFields) {
