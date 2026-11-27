@@ -54,7 +54,7 @@ function normalize(value) {
     .normalize("NFKC")
     .toLocaleLowerCase("en-IN")
     .replace(/['’]/g, "")
-    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim()
     .replace(/\s+/g, " ");
 }
