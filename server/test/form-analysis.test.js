@@ -49,6 +49,19 @@ test("accepts only exact database values and confident mappings", () => {
   assert.equal(mappings[0].value, "Aarav Sharma");
 });
 
+test("matches generic extracted fields by their original document label", () => {
+  const genericFacts = [
+    { id: "generic-1", fact_key: "consumer_ref_2026", fact_label: "Consumer Number", fact_value: "A-1092" },
+    { id: "generic-2", fact_key: "branch_name_text", fact_label: "Bank Branch", fact_value: "Bhopal Main" }
+  ];
+  const genericFields = [
+    { id: "consumer", label: "Consumer No.", tagName: "input", inputType: "text" },
+    { id: "branch", label: "Bank Branch", tagName: "input", inputType: "text" }
+  ];
+  const relevant = filterRelevantProfileFacts(genericFields, genericFacts);
+  assert.deepEqual(relevant.map((fact) => fact.id), ["generic-1", "generic-2"]);
+});
+
 test("rejects dropdown values not present in the form options", () => {
   const mappings = validateAiMappings([
     { fieldId: "state-field", factKey: "state", confidence: 0.95 }
