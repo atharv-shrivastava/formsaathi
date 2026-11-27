@@ -70,6 +70,13 @@ test("rejects a hallucinated value even when the model cites a genuine but unrel
         value: "9999",
         confidence: 0.99,
         evidence: "Roll Number: 0042"
+      },
+      {
+        key: "roll_number_short",
+        label: "Roll Number",
+        value: "004",
+        confidence: 0.99,
+        evidence: "Roll Number: 0042"
       }
     ]
   }, "Student Name: Alex Demo\\nRoll Number: 0042");

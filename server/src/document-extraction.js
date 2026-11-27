@@ -14,6 +14,15 @@ function normalizeForMatch(value) {
     .trim();
 }
 
+function containsExactValue(text, value) {
+  const textTokens = normalizeForMatch(text).split(/[^\\p{L}\\p{N}]+/u).filter(Boolean);
+  const valueTokens = normalizeForMatch(value).split(/[^\\p{L}\\p{N}]+/u).filter(Boolean);
+  if (valueTokens.length === 0 || valueTokens.length > textTokens.length) return false;
+  for (let index = 0; index <= textTokens.length - valueTokens.length; index += 1) {
+    if (valueTokens.every((token, offset) => token === textTokens[index + offset])) return true;
+  }
+  return false;
+}
 function slugify(value) {
   const slug = String(value ?? "")
     .normalize("NFKD")
@@ -40,7 +49,7 @@ function evidenceFromText(text, requestedEvidence, value) {
     rawEvidence &&
     normalizedEvidence &&
     normalizedSource.includes(normalizedEvidence) &&
-    normalizedEvidence.includes(normalizedValue)
+    containsExactValue(normalizedEvidence, normalizedValue)
   ) {
     return rawEvidence;
   }
@@ -49,7 +58,7 @@ function evidenceFromText(text, requestedEvidence, value) {
   // valid excerpt merely because it appears somewhere else in the document.
   const matchingLine = sourceText.split(/\r?\n/)
     .map((line) => compact(line, 500))
-    .find((line) => normalizeForMatch(line).includes(normalizedValue));
+    .find((line) => containsExactValue(line, normalizedValue));
   return matchingLine || "";
 }
 
