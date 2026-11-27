@@ -574,6 +574,114 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
     }
   }
 
+  async function approveFactAsGeneral(fact: ExtractedFact) {
+    const current = profileFacts.find((item) =>
+      item.fact_key === fact.fact_key && item.source_document_id === null
+    );
+    if (current && current.fact_value !== fact.fact_value) {
+      const confirmed = window.confirm(
+        "General information already has \"" + current.fact_value + "\" for " + displayFactKey(fact.fact_key) +
+        ". Replace it with \"" + fact.fact_value + "\" from " + fact.fact_label + "?"
+      );
+      if (!confirmed) return;
+    }
+    clearNotice();
+    setBusy(true);
+    try {
+      const { error: saveError } = await client.from("profile_facts").upsert({
+        user_id: user.id,
+        fact_key: fact.fact_key,
+        fact_label: fact.fact_label || displayFactKey(fact.fact_key),
+        fact_value: fact.fact_value,
+        source_document_id: null,
+        confidence: fact.confidence,
+        verified: true
+      }, { onConflict: "user_id,fact_key" });
+      if (saveError) throw saveError;
+      const { error: reviewError } = await client.from("extracted_facts")
+        .update({ review_status: "approved" }).eq("id", fact.id);
+      if (reviewError) throw reviewError;
+      setMessage(displayFactKey(fact.fact_key) + " promoted to General Info. The original document-specific value remains stored with its source document.");
+      await refreshData();
+    } catch (reason) {
+      setError(messageFor(reason));
+      await refreshData();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approveSelectedFactsAsGeneral(selectedFacts: ExtractedFact[]) {
+    if (selectedFacts.length === 0) return;
+    const uniqueByKey = new Map<string, ExtractedFact>();
+    const conflicts = new Set<string>();
+    for (const fact of selectedFacts) {
+      const existing = uniqueByKey.get(fact.fact_key);
+      if (existing && existing.fact_value !== fact.fact_value) conflicts.add(fact.fact_key);
+      else if (!existing) uniqueByKey.set(fact.fact_key, fact);
+    }
+    if (conflicts.size > 0) {
+      setError(
+        "You selected different values for the same general field: " +
+        Array.from(conflicts).map(displayFactKey).join(", ") +
+        ". Save those values to their separate documents, or select just one value to make it the general default."
+      );
+      return;
+    }
+
+    const replacements = Array.from(uniqueByKey.values()).filter((fact) => {
+      const current = profileFacts.find((item) =>
+        item.fact_key === fact.fact_key && item.source_document_id === null
+      );
+      return current && current.fact_value !== fact.fact_value;
+    });
+    if (replacements.length > 0) {
+      const summary = replacements.slice(0, 6).map((fact) =>
+        displayFactKey(fact.fact_key) + ": " + fact.fact_value
+      ).join("\n");
+      const more = replacements.length > 6 ? "\n…and " + (replacements.length - 6) + " more" : "";
+      if (!window.confirm(
+        "These values will replace existing General Info values:\n\n" + summary + more + "\n\nTheir source-document records will remain unchanged. Continue?"
+      )) return;
+    }
+
+    clearNotice();
+    setBusy(true);
+    try {
+      const generalRows = Array.from(uniqueByKey.values()).map((fact) => ({
+        user_id: user.id,
+        fact_key: fact.fact_key,
+        fact_label: fact.fact_label || displayFactKey(fact.fact_key),
+        fact_value: fact.fact_value,
+        source_document_id: null,
+        confidence: fact.confidence,
+        verified: true
+      }));
+      const { error: saveError } = await client.from("profile_facts").upsert(
+        generalRows,
+        { onConflict: "user_id,fact_key" }
+      );
+      if (saveError) throw saveError;
+
+      const selectedIds = selectedFacts.map((fact) => fact.id);
+      const { error: reviewError } = await client.from("extracted_facts")
+        .update({ review_status: "approved" })
+        .in("id", selectedIds)
+        .eq("review_status", "pending");
+      if (reviewError) {
+        throw new Error("General Info values were saved, but their review status could not be updated. Refresh and check the profile before retrying.");
+      }
+
+      setMessage("Saved " + uniqueByKey.size + " value(s) to General Info. Their original document records remain separate.");
+      await refreshData();
+    } catch (reason) {
+      setError(messageFor(reason));
+      await refreshData();
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveManualFact(factKey: string, value: string) {
     const cleanValue = value.trim().replace(/\\s{2,}/g, " ");
     if (!cleanValue) throw new Error("Enter a value before saving.");
@@ -780,7 +888,9 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
                   pendingFacts={pendingFacts}
                   documents={documents}
                   onApprove={approveFact}
+                  onApproveGeneral={approveFactAsGeneral}
                   onApproveSelected={approveSelectedFacts}
+                  onApproveSelectedGeneral={approveSelectedFactsAsGeneral}
                   onReject={rejectFact}
                   onUpdate={updateFactValue}
                   onManualSave={saveManualFact}
