@@ -79,7 +79,7 @@ test("rejects a hallucinated value even when the model cites a genuine but unrel
         evidence: "Roll Number: 0042"
       }
     ]
-  }, "Student Name: Alex Demo\\nRoll Number: 0042");
+  }, "Student Name: Alex Demo\nRoll Number: 0042");
 
   assert.deepEqual(result.facts, []);
 });

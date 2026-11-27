@@ -44,7 +44,7 @@ test("keeps father, mother and guardian names in separate fact fields", () => {
     "Mother's Name: Mrs. Sunita Demo",
     "Guardian Name: Dr. Jordan Demo",
     "Parent Name: Shri Alex Demo"
-  ].join("\\n"));
+  ].join("\n"));
 
   assert.equal(facts.find((fact) => fact.key === "father_name")?.value, "Rakesh Demo");
   assert.equal(facts.find((fact) => fact.key === "mother_name")?.value, "Sunita Demo");
