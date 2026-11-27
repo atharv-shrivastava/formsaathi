@@ -31,6 +31,18 @@ test("sanitizes detected fields and rejects duplicate or malformed controls", ()
   assert.deepEqual(sanitized.map((field) => field.id), ["name-field", "father-field", "state-field", "upload-field"]);
 });
 
+test("does not forward checkboxes, radio buttons or feedback textareas to analysis", () => {
+  const sanitized = sanitizeDetectedFields([
+    { id: "agree", label: "I agree", tagName: "input", inputType: "checkbox" },
+    { id: "gender", label: "Gender", tagName: "input", inputType: "radio" },
+    { id: "feedback", label: "Feedback", tagName: "textarea", inputType: "textarea" },
+    { id: "comments", label: "Additional comments", tagName: "textarea", inputType: "textarea" },
+    { id: "address", label: "Address", tagName: "textarea", inputType: "textarea" },
+    { id: "name", label: "Full Name", tagName: "input", inputType: "text" }
+  ]);
+  assert.deepEqual(sanitized.map((field) => field.id), ["address", "name"]);
+});
+
 test("passes the complete bounded detected-field set through sanitization", () => {
   const raw = Array.from({ length: 120 }, (_, index) => ({
     id: "field-" + index,
@@ -47,6 +59,47 @@ test("regex retrieval separates applicant and father name candidates", () => {
   const father = retrieved.find((item) => item.fieldId === "father-field");
   assert.deepEqual(applicant.candidates.map((candidate) => candidate.factId), ["1"]);
   assert.deepEqual(father.candidates.map((candidate) => candidate.factId), ["2"]);
+});
+
+test("derives first and last names from an explicitly labelled applicant full-name fact", () => {
+  const nameFields = [
+    { id: "first", label: "First Name", name: "firstName", tagName: "input", inputType: "text" },
+    { id: "last", label: "Last Name", name: "lastName", tagName: "input", inputType: "text" }
+  ];
+  const fullNameFacts = [{
+    id: "full-name-1",
+    fact_key: "full_name",
+    fact_label: "Full Name",
+    fact_value: "Aarav Kumar Sharma"
+  }];
+  const retrieved = retrieveProfileFactsForFields(nameFields, fullNameFacts);
+  assert.equal(retrieved[0].candidates[0].factValue, "Aarav");
+  assert.equal(retrieved[1].candidates[0].factValue, "Sharma");
+
+  const mappings = validateAiMappings([
+    { fieldId: "first", factId: "full-name-1", confidence: 0.94 },
+    { fieldId: "last", factId: "full-name-1", confidence: 0.94 }
+  ], nameFields, retrieved);
+  assert.deepEqual(mappings.map((mapping) => [mapping.fieldId, mapping.value]), [
+    ["first", "Aarav"],
+    ["last", "Sharma"]
+  ]);
+});
+
+test("does not derive a surname from a single-token full name", () => {
+  const nameFields = [
+    { id: "first", label: "First Name", tagName: "input", inputType: "text" },
+    { id: "last", label: "Last Name", tagName: "input", inputType: "text" }
+  ];
+  const facts = [{
+    id: "one-part",
+    fact_key: "full_name",
+    fact_label: "Full Name",
+    fact_value: "Aarav"
+  }];
+  const retrieved = retrieveProfileFactsForFields(nameFields, facts);
+  assert.equal(retrieved[0].candidates.length, 0);
+  assert.equal(retrieved[1].candidates.length, 0);
 });
 
 test("retrieves semantically related facts using lexical RAG for uncommon labels", () => {
