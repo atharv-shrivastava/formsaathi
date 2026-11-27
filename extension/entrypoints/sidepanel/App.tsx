@@ -227,6 +227,7 @@ export default function App() {
         throw new Error("FormSaathi could not inspect this page. Check that the extension has access to the site, then reload the page and scan again.");
       }
       const primaryFrame = availableFrames.find((item) => item.frameId === 0) || availableFrames[0];
+      if (!primaryFrame) throw new Error("No accessible page frame was found. Reload the site and try again.");
       const nextScan: ScanResult = {
         title: primaryFrame.result.title,
         url: primaryFrame.result.url,
@@ -378,7 +379,8 @@ export default function App() {
       const response = await chrome.tabs.sendMessage(tabId, {
         type: "FS_FILL",
         fieldId: row.field.domId || row.field.id,
-        value: row.value
+        value: row.value,
+        canonicalKey: row.canonicalKey
       }, { frameId: row.field.frameId ?? 0 }) as { ok?: boolean; message?: string };
       if (!response?.ok) throw new Error(response?.message || "The field could not be filled.");
       setRows((current) => current.map((item, itemIndex) =>
@@ -424,7 +426,8 @@ export default function App() {
           const response = await chrome.tabs.sendMessage(tabId, {
             type: "FS_FILL",
             fieldId: row.field.domId || row.field.id,
-            value: row.value
+            value: row.value,
+            canonicalKey: row.canonicalKey
           }, { frameId: row.field.frameId ?? 0 }) as { ok?: boolean; message?: string };
 
           if (response?.ok) {
