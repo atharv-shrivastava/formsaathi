@@ -579,7 +579,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         .maybeSingle();
       if (updateError) throw updateError;
       if (!data) throw new Error("This candidate is no longer pending. Refresh the page and try again.");
-      setMessage(displayFactKey(fact.fact_key) + " updated. Review it before approving.");
+      setMessage((fact.fact_label || displayFactKey(fact.fact_key)) + " updated. Review it before approving.");
       await refreshData();
     } catch (reason) {
       setError(messageFor(reason));
@@ -860,7 +860,7 @@ function DocumentsPage({
           <div className="table-heading"><span>DOCUMENT</span><span>CATEGORY</span><span>ADDED</span><span>STATUS</span><span>ACTIONS</span></div>
           {documents.map((document) => (
             <div className="document-row" key={document.id}>
-              <div className="document-name"><div className="file-icon">{document.mime_type === "application/pdf" ? "PDF" : "IMG"}</div><div><strong>{document.filename}</strong><small>{formatBytes(document.size_bytes)}</small></div></div>
+              <div className="document-name"><div className="file-icon">{document.mime_type === "application/pdf" ? "PDF" : "IMG"}</div><div><strong>{document.filename}</strong><small>{document.document_type ? "Detected: " + document.document_type : formatBytes(document.size_bytes)}</small></div></div>
               <div><select className="table-select" value={document.category} onChange={(event) => onUpdateCategory(document, event.target.value as DocumentCategory)}>{categoryOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
               <span className="table-date">{formatDate(document.created_at)}</span>
               <span className={"status-chip status-" + document.status}>{document.status === "extracted" ? "Extracted" : document.status === "failed" ? "Retry needed" : "Uploaded"}</span>
@@ -874,11 +874,12 @@ function DocumentsPage({
   );
 }
 
-function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onReject, onUpdate, onManualSave, busy }: {
+function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onApproveSelected, onReject, onUpdate, onManualSave, busy }: {
   verifiedFacts: ProfileFact[];
   pendingFacts: ExtractedFact[];
   documents: UserDocument[];
   onApprove: (fact: ExtractedFact) => void;
+  onApproveSelected: (facts: ExtractedFact[]) => void;
   onReject: (fact: ExtractedFact) => void;
   onUpdate: (fact: ExtractedFact, value: string) => void;
   onManualSave: (factKey: string, value: string) => Promise<void>;
@@ -888,7 +889,24 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onReje
   const [draftValues, setDraftValues] = useState<Record<string, string>>({});
   const [manualValues, setManualValues] = useState<Record<string, string>>({});
   const [manualError, setManualError] = useState("");
-  const docName = (id: string) => documents.find((document) => document.id === id)?.filename || "Source document";
+  const [selectedFactIds, setSelectedFactIds] = useState<string[]>([]);
+  const docFor = (id: string) => documents.find((document) => document.id === id);
+  const docName = (id: string) => docFor(id)?.filename || "Source document";
+  const pendingGroups = pendingFacts.reduce<Record<string, ExtractedFact[]>>((groups, fact) => {
+    (groups[fact.document_id] ||= []).push(fact);
+    return groups;
+  }, {});
+  function toggleFact(id: string, checked: boolean) {
+    setSelectedFactIds((current) => checked
+      ? Array.from(new Set([...current, id]))
+      : current.filter((item) => item !== id));
+  }
+  function toggleDocumentGroup(facts: ExtractedFact[], checked: boolean) {
+    const ids = facts.map((fact) => fact.id);
+    setSelectedFactIds((current) => checked
+      ? Array.from(new Set([...current, ...ids]))
+      : current.filter((id) => !ids.includes(id)));
+  }
   const manualFields = [
     { key: "applicant_name", label: "Applicant name", type: "text" },
     { key: "father_name", label: "Father's name", type: "text" },
@@ -950,49 +968,89 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onReje
         <div className="section-head"><div><p className="eyebrow">SAVED INFORMATION</p><h3>Reviewed profile</h3></div><span className="soft-badge">{verifiedFacts.length} fields</span></div>
         {verifiedFacts.length === 0 ? <EmptyState title="Nothing verified yet" text="Enter information manually above or run OCR on a document and approve the values you want to save here." /> : (
           <div className="fact-grid">{verifiedFacts.map((fact) => (
-            <div className="fact-card" key={fact.id}><div className="fact-label">{displayFactKey(fact.fact_key)} <span className="verified-dot">✓ Reviewed</span></div><strong>{fact.fact_value}</strong><small>Source: {fact.source_document_id ? docName(fact.source_document_id) : "Manually added"}</small></div>
+            <div className="fact-card" key={fact.id}><div className="fact-label">{fact.fact_label || displayFactKey(fact.fact_key)} <span className="verified-dot">✓ Reviewed</span></div><strong>{fact.fact_value}</strong><small>Source: {fact.source_document_id ? docName(fact.source_document_id) : "Manually added"}</small></div>
           ))}</div>
         )}
       </section>
       <section className="surface-card review-section">
-        <div className="section-head"><div><p className="eyebrow">NEEDS YOUR DECISION</p><h3>Extracted candidates</h3></div><span className={pendingFacts.length ? "review-count active" : "review-count"}>{pendingFacts.length} pending</span></div>
+        <div className="section-head"><div><p className="eyebrow">NEEDS YOUR DECISION</p><h3>Extracted candidates</h3><p className="muted">Fields stay attached to their source document until you choose which values belong in your reusable profile.</p></div><span className={pendingFacts.length ? "review-count active" : "review-count"}>{pendingFacts.length} pending</span></div>
         {pendingFacts.length === 0 ? <EmptyState title="You're all caught up" text="New OCR results will appear here for your review." /> : (
-          <div className="candidate-list">{pendingFacts.map((fact) => {
-            const isEditing = editingFactId === fact.id;
-            const draft = draftValues[fact.id] ?? fact.fact_value;
-            return (
-              <article className="candidate-row" key={fact.id}>
-                <div className="candidate-main">
-                  <div className="candidate-label">{displayFactKey(fact.fact_key)}</div>
-                  {isEditing ? (
-                    <input
-                      className="candidate-edit-input"
-                      aria-label={"Edit " + displayFactKey(fact.fact_key)}
-                      value={draft}
-                      onChange={(event) => setDraftValues((current) => ({ ...current, [fact.id]: event.target.value }))}
-                      autoFocus
-                    />
-                  ) : <strong>{fact.fact_value}</strong>}
-                  <small>{docName(fact.document_id)}{fact.confidence !== null ? " · extraction heuristic " + Math.round(fact.confidence * 100) + "%" : ""}</small>
-                  {fact.evidence && <p className="evidence">“{fact.evidence}”</p>}
-                </div>
-                <div className="candidate-actions">
-                  {isEditing ? (
-                    <>
-                      <button className="button primary candidate-save" disabled={busy || !draft.trim()} onClick={() => { onUpdate(fact, draft); setEditingFactId(null); }}>Save edit</button>
-                      <button className="text-button reject-button" disabled={busy} onClick={() => setEditingFactId(null)}>Cancel</button>
-                    </>
-                  ) : (
-                    <>
-                      <button className="text-button edit-button" disabled={busy} onClick={() => { setDraftValues((current) => ({ ...current, [fact.id]: fact.fact_value })); setEditingFactId(fact.id); }}>Edit</button>
-                      <button className="button approve-button" disabled={busy} onClick={() => onApprove(fact)}>✓ Use this value</button>
-                      <button className="text-button reject-button" disabled={busy} onClick={() => onReject(fact)}>Dismiss</button>
-                    </>
-                  )}
-                </div>
-              </article>
-            );
-          })}</div>
+          <>
+            <div className="review-bulk-toolbar">
+              <label className="candidate-select-all"><input
+                type="checkbox"
+                checked={pendingFacts.length > 0 && pendingFacts.every((fact) => selectedFactIds.includes(fact.id))}
+                onChange={(event) => setSelectedFactIds(event.target.checked ? pendingFacts.map((fact) => fact.id) : [])}
+                disabled={busy}
+              /><span>Select all detected fields</span></label>
+              <button className="button primary candidate-bulk-save" disabled={busy || selectedFactIds.length === 0} onClick={() => onApproveSelected(pendingFacts.filter((fact) => selectedFactIds.includes(fact.id)))}>
+                Save {selectedFactIds.length ? selectedFactIds.length + " selected" : "selected"} to profile
+              </button>
+            </div>
+            <div className="candidate-document-groups">
+              {Object.entries(pendingGroups).map(([documentId, groupFacts]) => {
+                const source = docFor(documentId);
+                const selectedCount = groupFacts.filter((fact) => selectedFactIds.includes(fact.id)).length;
+                const allSelected = selectedCount === groupFacts.length;
+                return (
+                  <section className="candidate-document-group" key={documentId}>
+                    <div className="candidate-document-heading">
+                      <div><strong>{source?.document_type || source?.filename || "Source document"}</strong><small>{source?.filename || "Document"} · {groupFacts.length} detected field(s)</small></div>
+                      <label className="candidate-select-all"><input
+                        type="checkbox"
+                        checked={allSelected}
+                        onChange={(event) => toggleDocumentGroup(groupFacts, event.target.checked)}
+                        disabled={busy}
+                      /><span>{allSelected ? "Selected" : "Select document"}</span></label>
+                    </div>
+                    <div className="candidate-list">
+                      {groupFacts.map((fact) => {
+                        const isEditing = editingFactId === fact.id;
+                        const draft = draftValues[fact.id] ?? fact.fact_value;
+                        const fieldLabel = fact.fact_label || displayFactKey(fact.fact_key);
+                        return (
+                          <article className="candidate-row" key={fact.id}>
+                            <label className="candidate-select">
+                              <input type="checkbox" checked={selectedFactIds.includes(fact.id)} onChange={(event) => toggleFact(fact.id, event.target.checked)} disabled={busy} />
+                              <span>Select</span>
+                            </label>
+                            <div className="candidate-main">
+                              <div className="candidate-label">{fieldLabel}</div>
+                              {isEditing ? (
+                                <input
+                                  className="candidate-edit-input"
+                                  aria-label={"Edit " + fieldLabel}
+                                  value={draft}
+                                  onChange={(event) => setDraftValues((current) => ({ ...current, [fact.id]: event.target.value }))}
+                                  autoFocus
+                                />
+                              ) : <strong>{fact.fact_value}</strong>}
+                              <small>{fact.confidence !== null ? "Extraction confidence " + Math.round(fact.confidence * 100) + "%" : "Confidence unavailable"}</small>
+                              {fact.evidence && <p className="evidence">“{fact.evidence}”</p>}
+                            </div>
+                            <div className="candidate-actions">
+                              {isEditing ? (
+                                <>
+                                  <button className="button primary candidate-save" disabled={busy || !draft.trim()} onClick={() => { onUpdate(fact, draft); setEditingFactId(null); }}>Save edit</button>
+                                  <button className="text-button reject-button" disabled={busy} onClick={() => setEditingFactId(null)}>Cancel</button>
+                                </>
+                              ) : (
+                                <>
+                                  <button className="text-button edit-button" disabled={busy} onClick={() => { setDraftValues((current) => ({ ...current, [fact.id]: fact.fact_value })); setEditingFactId(fact.id); }}>Edit</button>
+                                  <button className="button approve-button" disabled={busy} onClick={() => onApprove(fact)}>Use this value</button>
+                                  <button className="text-button reject-button" disabled={busy} onClick={() => { toggleFact(fact.id, false); onReject(fact); }}>Dismiss</button>
+                                </>
+                              )}
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          </>
         )}
       </section>
       <p className="inline-note"><span>ⓘ</span> You can edit OCR candidates before approving them. OCR confidence is a technical estimate, not proof that a value is correct. Always compare it with the original document.</p>
