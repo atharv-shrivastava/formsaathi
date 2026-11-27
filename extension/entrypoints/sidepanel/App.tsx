@@ -216,8 +216,8 @@ export default function App() {
 
       const facts: Array<CandidateFact & { sourceId: string; sourceName: string }> = [];
       let cloudFactCount = 0;
-      if (account && fieldKeys.length > 0) {
-        const cloudFacts = await getVerifiedProfileFacts(fieldKeys);
+      if (account) {
+        const cloudFacts = await getVerifiedProfileFacts();
         cloudFactCount = cloudFacts.length;
         for (const fact of cloudFacts) {
           facts.push({
