@@ -69,6 +69,17 @@ set
   verified = excluded.verified,
   updated_at = greatest(document_profile_facts.updated_at, excluded.updated_at);
 
--- profile_facts is now the general, reusable information store.
-delete from public.profile_facts
-where source_document_id is not null;
+-- New application versions only read source_document_id IS NULL from profile_facts.
+-- Keep legacy document rows temporarily so already-installed extension versions can
+-- continue to read their existing values during the rollout. They are compatibility
+-- shadows only; all new document approvals are written to document_profile_facts.
+-- Deleting a source document must remove its legacy shadow rather than turning it
+-- into a general profile value.
+alter table public.profile_facts
+  drop constraint if exists profile_facts_source_document_id_fkey;
+
+alter table public.profile_facts
+  add constraint profile_facts_source_document_id_fkey
+  foreign key (source_document_id)
+  references public.documents (id)
+  on delete cascade;
