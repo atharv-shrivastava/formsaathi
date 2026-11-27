@@ -140,7 +140,7 @@ function splitApplicantName(value) {
 function isApplicantFullNameFact(fact) {
   const key = String(fact.fact_key || "").toLowerCase().replace(/[ -]/g, "_");
   return applicantFullNameKeys.has(key) ||
-    ["applicant name", "name of applicant", "student name", "candidate name", "full name"].includes(normalize(fact.fact_label));
+    ["applicant name", "applicant full name", "full name of applicant", "name of applicant", "student name", "student full name", "candidate name", "full name"].includes(normalize(fact.fact_label));
 }
 
 function valueForField(fieldKind, fact) {
@@ -199,7 +199,7 @@ function scoreFieldFact(field, fact) {
     }
   }
 
-  const key = String(fact.fact_key || "").trim();
+  const key = normalize(fact.fact_key).replace(/\\s+/g, "_");
   const aliases = factAliases[key] || [];
   if (aliases.some((alias) => fieldText.includes(normalize(alias)))) {
     score = Math.max(score, 0.94);
