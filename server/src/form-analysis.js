@@ -199,7 +199,7 @@ function scoreFieldFact(field, fact) {
     }
   }
 
-  const key = normalize(fact.fact_key).replace(/\\s+/g, "_");
+  const key = normalize(fact.fact_key).replace(/\s+/g, "_");
   const aliases = factAliases[key] || [];
   if (aliases.some((alias) => fieldText.includes(normalize(alias)))) {
     score = Math.max(score, 0.94);
