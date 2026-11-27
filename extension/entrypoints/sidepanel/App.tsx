@@ -191,14 +191,32 @@ export default function App() {
     setStatus("Inspecting visible form controls…");
     try {
       const tabId = await getActiveTabId();
-      const response = await chrome.tabs.sendMessage(tabId, { type: "FS_SCAN" }) as {
-        ok?: boolean;
-        result?: ScanResult;
-      };
-      if (!response?.ok || !response.result) {
-        throw new Error("FormSaathi could not inspect this page. It may be a restricted browser page or the content script may not be available.");
+      // Query every frame: many government portals put the actual form in an iframe.
+      const frames = await chrome.webNavigation.getAllFrames({ tabId }).catch(() => undefined);
+      const frameIds = frames?.map((frame) => frame.frameId) ?? [0];
+      const frameResults = await Promise.all(frameIds.map(async (frameId) => {
+        try {
+          const response = await chrome.tabs.sendMessage(tabId, { type: "FS_SCAN" }, { frameId }) as {
+            ok?: boolean;
+            result?: ScanResult;
+          };
+          if (!response?.ok || !response.result) return null;
+          return { frameId, result: response.result };
+        } catch {
+          return null;
+        }
+      }));
+      const successfulFrames = frameResults.filter((item): item is NonNullable<typeof item> => Boolean(item));
+      if (!successfulFrames.length) {
+        throw new Error("FormSaathi could not reach this page. Reload the tab after installing the extension, then scan again. Browser-internal pages and some protected portals block extensions.");
       }
-      const nextScan = response.result;
+      const nextScan: ScanResult = {
+        title: successfulFrames[0]?.result.title || "Web form",
+        url: successfulFrames[0]?.result.url || "",
+        fields: successfulFrames.flatMap(({ frameId, result }) =>
+          result.fields.map((field) => ({ ...field, frameId }))
+        )
+      };
       setScan(nextScan);
       if (nextScan.fields.length === 0) {
         setRows([]);
@@ -326,7 +344,7 @@ export default function App() {
   async function highlight(row: ReviewRow) {
     try {
       const tabId = await getActiveTabId();
-      await chrome.tabs.sendMessage(tabId, { type: "FS_HIGHLIGHT", fieldId: row.field.id, label: row.field.label });
+      await chrome.tabs.sendMessage(tabId, { type: "FS_HIGHLIGHT", fieldId: row.field.id, label: row.field.label }, { frameId: row.field.frameId ?? 0 });
     } catch {
       setStatus("Could not highlight this field. Scan the page again.");
     }
@@ -352,7 +370,7 @@ export default function App() {
         type: "FS_FILL",
         fieldId: row.field.id,
         value: row.value
-      }) as { ok?: boolean; message?: string };
+      }, { frameId: row.field.frameId ?? 0 }) as { ok?: boolean; message?: string };
       if (!response?.ok) throw new Error(response?.message || "The field could not be filled.");
       setRows((current) => current.map((item, itemIndex) =>
         itemIndex === index ? { ...item, status: "filled" } : item
@@ -398,7 +416,7 @@ export default function App() {
             type: "FS_FILL",
             fieldId: row.field.id,
             value: row.value
-          }) as { ok?: boolean; message?: string };
+          }, { frameId: row.field.frameId ?? 0 }) as { ok?: boolean; message?: string };
 
           if (response?.ok) {
             filledIds.add(row.field.id);
