@@ -323,6 +323,10 @@ export default function App() {
 
   async function approveFill(index: number) {
     const row = rows[index];
+    if (!row) {
+      setStatus("This field review is no longer available. Scan the page again.");
+      return;
+    }
     if (!row.value.trim()) {
       setStatus("Enter a value before approving this field.");
       return;

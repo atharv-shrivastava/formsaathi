@@ -64,8 +64,10 @@ function isApplicantFullNameFact(fact: CandidateFact): boolean {
 
 function deriveFullNamePart(key: string, value: string): string {
   const parts = String(value || "").trim().split(/\s+/).filter(Boolean);
-  if (parts.length < 2) return "";
-  return key === "first_name" ? parts[0] : parts[parts.length - 1];
+  const firstName = parts[0];
+  const lastName = parts.at(-1);
+  if (!firstName || !lastName || parts.length < 2) return "";
+  return key === "first_name" ? firstName : lastName;
 }
 
 export function createReviewRows(
@@ -108,6 +110,7 @@ export function createReviewRows(
     }
 
     const candidate = candidates.sort((a, b) => b.confidence - a.confidence)[0];
+    if (!candidate) return { field, canonicalKey: key, value: "", status: "unmapped" };
     return {
       field,
       canonicalKey: key,

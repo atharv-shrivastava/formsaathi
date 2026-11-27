@@ -31,7 +31,9 @@ function getLabel(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectEl
       .filter(Boolean).join(" ");
     if (text) return text;
   }
-  if (element.placeholder) return element.placeholder.trim();
+  if ((element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) && element.placeholder) {
+    return element.placeholder.trim();
+  }
   if (element.name) return element.name.replace(/[_-]/g, " ");
   if (element.id) return element.id.replace(/[_-]/g, " ");
   const parentText = element.parentElement?.innerText?.trim().replace(/\s+/g, " ") || "";
