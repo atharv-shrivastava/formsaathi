@@ -173,3 +173,33 @@ export async function getVerifiedProfileFacts(): Promise<VerifiedProfileFact[]> 
   if (!response.ok) throw await responseError(response);
   return await response.json() as VerifiedProfileFact[];
 }
+
+export interface ApprovedDocumentFact {
+  id: string;
+  document_id: string;
+  fact_key: string;
+  fact_label: string | null;
+  fact_value: string;
+  confidence: number | null;
+  evidence: string | null;
+}
+
+export async function getApprovedDocumentFacts(): Promise<ApprovedDocumentFact[]> {
+  const session = await getExtensionSession();
+  if (!session) throw new Error("Connect your FormSaathi account to retrieve document-specific values.");
+
+  const url = new URL(`${SUPABASE_URL}/rest/v1/extracted_facts`);
+  url.searchParams.set("select", "id,document_id,fact_key,fact_label,fact_value,confidence,evidence");
+  url.searchParams.set("review_status", "eq.approved");
+  url.searchParams.set("order", "created_at.desc");
+  url.searchParams.set("limit", "500");
+
+  const response = await fetch(url, {
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${session.access_token}`
+    }
+  });
+  if (!response.ok) throw await responseError(response);
+  return await response.json() as ApprovedDocumentFact[];
+}
