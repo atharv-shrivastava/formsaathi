@@ -76,6 +76,7 @@ export default function PaperScene({ className = "", label }: PaperSceneProps) {
           roughness: 0.56,
           metalness: 0.08
         });
+        const whiteMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 });
 
         const addBox = (
           parent: THREE.Object3D,
@@ -138,8 +139,8 @@ export default function PaperScene({ className = "", label }: PaperSceneProps) {
 
         // A compact verification stamp on the page.
         addBox(details, 0.43, 0.43, 0.055, greenMaterial, 0.79, -1.04, 0.055);
-        addBox(details, 0.22, 0.045, 0.018, 0xffffff === 0 ? paperMaterial : new THREE.MeshStandardMaterial({ color: 0xffffff }), 0.76, -1.06, 0.095).rotation.z = -0.72;
-        addBox(details, 0.13, 0.045, 0.018, new THREE.MeshStandardMaterial({ color: 0xffffff }), 0.88, -1.01, 0.095).rotation.z = 0.82;
+        addBox(details, 0.22, 0.045, 0.018, whiteMaterial, 0.76, -1.06, 0.095).rotation.z = -0.72;
+        addBox(details, 0.13, 0.045, 0.018, whiteMaterial, 0.88, -1.01, 0.095).rotation.z = 0.82;
 
         const orbit = new THREE.Mesh(
           new THREE.TorusGeometry(2.02, 0.012, 8, 100),
