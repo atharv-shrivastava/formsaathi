@@ -136,7 +136,7 @@ function clearHighlight(): void {
 }
 
 function highlightField(fieldId: string, label: string): boolean {
-  const element = document.querySelector<HTMLElement>("[" + KEY_ATTRIBUTE + "=\"" + CSS.escape(fieldId) + "\"]");
+  const element = findKeyedElement(fieldId);
   if (!element || !isVisible(element)) return false;
   clearHighlight();
   highlightedElement = element;
