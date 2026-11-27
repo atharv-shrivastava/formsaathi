@@ -710,11 +710,6 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="sidebar-help">
-            <div className="help-symbol">?</div>
-            <strong>Need a hand?</strong>
-            <p>FormSaathi guides you. You stay in control.</p>
-          </div>
           <div className="user-card">
             <div className="avatar">{(user.user_metadata?.full_name || user.email || "F").slice(0, 1).toUpperCase()}</div>
             <div className="user-meta"><strong>{displayName}</strong><span>{user.email}</span></div>
@@ -842,7 +837,6 @@ function OverviewPage({ name, documents, verifiedFacts, pendingFacts, applicatio
             <ChecklistItem complete={documents.length > 0} title="Add your documents" description="Upload a PDF or a clear image." onClick={() => onNavigate("documents")} />
             <ChecklistItem complete={extractedCount > 0} title="Extract information" description="Run OCR on a document you choose." onClick={() => onNavigate("documents")} />
             <ChecklistItem complete={verifiedFacts.length > 0} title="Review your profile" description="Approve the values you want to keep." onClick={() => onNavigate("profile")} />
-            <ChecklistItem complete={false} title="Connect your browser extension" description="Use your FormSaathi account to scan supported online forms." onClick={() => onNavigate("extension")} />
           </div>
         </section>
         <section className="surface-card recent-card">
@@ -852,7 +846,7 @@ function OverviewPage({ name, documents, verifiedFacts, pendingFacts, applicatio
           )}
         </section>
       </div>
-      <section className="extension-strip"><div className="extension-icon">↗</div><div><strong>Works with your browser</strong><p>The extension will use the reviewed profile from this account after secure account pairing is added.</p></div><span className="coming-pill">PAIRING NEXT</span></section>
+      <section className="extension-strip"><div className="extension-icon">↗</div><div><strong>Browser extension available</strong><p>Install the Chrome extension and sign in with this same account. Approved profile facts sync for form matching.</p></div><button type="button" className="text-button" onClick={() => onNavigate("extension")}>View setup →</button></section>
     </div>
   );
 }

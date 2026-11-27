@@ -26,14 +26,28 @@ function slugify(value) {
 }
 
 function evidenceFromText(text, requestedEvidence, value) {
+  const normalizedValue = normalizeForMatch(value);
+  if (!normalizedValue) return "";
+
+  const sourceText = String(text || "");
   const rawEvidence = compact(requestedEvidence, 500);
-  if (rawEvidence && normalizeForMatch(text).includes(normalizeForMatch(rawEvidence))) {
+  const normalizedEvidence = normalizeForMatch(rawEvidence);
+  const normalizedSource = normalizeForMatch(sourceText);
+
+  // A quoted excerpt is useful only when it is genuinely present in OCR output
+  // AND contains the exact candidate value being proposed by the model.
+  if (
+    rawEvidence &&
+    normalizedEvidence &&
+    normalizedSource.includes(normalizedEvidence) &&
+    normalizedEvidence.includes(normalizedValue)
+  ) {
     return rawEvidence;
   }
 
-  const normalizedValue = normalizeForMatch(value);
-  if (!normalizedValue) return "";
-  const matchingLine = String(text || "").split(/\r?\n/)
+  // Fall back to an OCR line that contains the value. Never trust an unrelated
+  // valid excerpt merely because it appears somewhere else in the document.
+  const matchingLine = sourceText.split(/\r?\n/)
     .map((line) => compact(line, 500))
     .find((line) => normalizeForMatch(line).includes(normalizedValue));
   return matchingLine || "";

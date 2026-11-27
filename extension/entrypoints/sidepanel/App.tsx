@@ -468,7 +468,7 @@ export default function App() {
           <div className="brand-caption">Your form companion</div>
         </div>
         <div className={apiReady ? "service-pill online" : "service-pill offline"}>
-          <span /> Hosted OCR {apiReady ? "online" : "offline"}
+          <span /> FormSaathi API {apiReady ? "online" : "offline"}
         </div>
       </header>
 
@@ -577,7 +577,7 @@ export default function App() {
               >
                 {busy ? "Working…" : fillableCount > 0 ? "Fill all available fields (" + fillableCount + ")" : "No fields ready to fill"}
               </button>
-              <p className="muted small">Fills only fields with a value. File uploads, conflicts and already-filled fields are skipped. The application is never submitted.</p>
+              <p className="muted small">File uploads and conflicts are skipped. Existing page values may be replaced after confirmation. FormSaathi never submits the application.</p>
               <button className="secondary-button full" disabled={busy} onClick={() => void tryAiMapping()}>Re-run AI form analysis</button>
               <p className="muted small">Uses the hosted FormSaathi backend and Gemini. Each AI request requires your confirmation.</p>
               <div className="mapping-list">
