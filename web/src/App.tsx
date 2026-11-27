@@ -1066,12 +1066,14 @@ function DocumentsPage({
   );
 }
 
-function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onApproveSelected, onReject, onUpdate, onManualSave, busy }: {
+function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onApproveGeneral, onApproveSelected, onApproveSelectedGeneral, onReject, onUpdate, onManualSave, busy }: {
   verifiedFacts: ProfileFact[];
   pendingFacts: ExtractedFact[];
   documents: UserDocument[];
   onApprove: (fact: ExtractedFact) => void;
+  onApproveGeneral: (fact: ExtractedFact) => void;
   onApproveSelected: (facts: ExtractedFact[]) => void;
+  onApproveSelectedGeneral: (facts: ExtractedFact[]) => void;
   onReject: (fact: ExtractedFact) => void;
   onUpdate: (fact: ExtractedFact, value: string) => void;
   onManualSave: (factKey: string, value: string) => Promise<void>;
@@ -1205,9 +1207,14 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
                 onChange={(event) => setSelectedFactIds(event.target.checked ? pendingFacts.map((fact) => fact.id) : [])}
                 disabled={busy}
               /><span>Select all detected fields</span></label>
-              <button className="button primary candidate-bulk-save" disabled={busy || selectedFactIds.length === 0} onClick={() => onApproveSelected(pendingFacts.filter((fact) => selectedFactIds.includes(fact.id)))}>
-                Save {selectedFactIds.length ? selectedFactIds.length + " selected" : "selected"} to document records
-              </button>
+              <div className="review-bulk-actions">
+                <button className="button primary candidate-bulk-save" disabled={busy || selectedFactIds.length === 0} onClick={() => onApproveSelected(pendingFacts.filter((fact) => selectedFactIds.includes(fact.id)))}>
+                  Save to document records
+                </button>
+                <button className="button candidate-general-save" disabled={busy || selectedFactIds.length === 0} onClick={() => onApproveSelectedGeneral(pendingFacts.filter((fact) => selectedFactIds.includes(fact.id)))}>
+                  Set as General Info
+                </button>
+              </div>
             </div>
             <div className="candidate-document-groups">
               {Object.entries(pendingGroups).map(([documentId, groupFacts]) => {
@@ -1259,7 +1266,8 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
                               ) : (
                                 <>
                                   <button className="text-button edit-button" disabled={busy} onClick={() => { setDraftValues((current) => ({ ...current, [fact.id]: fact.fact_value })); setEditingFactId(fact.id); }}>Edit</button>
-                                  <button className="button approve-button" disabled={busy} onClick={() => onApprove(fact)}>Use this value</button>
+                                  <button className="button approve-button" disabled={busy} onClick={() => onApprove(fact)}>Save to this document</button>
+                                  <button className="button candidate-general-save" disabled={busy} onClick={() => onApproveGeneral(fact)}>Use as General Info</button>
                                   <button className="text-button reject-button" disabled={busy} onClick={() => { toggleFact(fact.id, false); onReject(fact); }}>Dismiss</button>
                                 </>
                               )}
