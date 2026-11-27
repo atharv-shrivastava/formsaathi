@@ -6,9 +6,9 @@ const MAX_CANDIDATES_PER_FIELD = 6;
 // Regex signals are deliberately broad retrieval hints, not permission to autofill.
 // The model proposes a mapping; the validator still checks the exact retrieved fact.
 const semanticPatterns = [
-  ["father_name", /\b(father|fathers|dad|paternal)\b.*\b(name)?\b|\b(name)\b.*\b(father|fathers|dad)\b/],
-  ["mother_name", /\b(mother|mothers|mom|maternal)\b.*\b(name)?\b|\b(name)\b.*\b(mother|mothers|mom)\b/],
-  ["guardian_name", /\b(guardian|parent)\b.*\b(name)?\b|\b(name)\b.*\b(guardian|parent)\b/],
+  ["father_name", /\b(father|fathers|dad|paternal)\b.*\bname\b|\bname\b.*\b(father|fathers|dad)\b/],
+  ["mother_name", /\b(mother|mothers|mom|maternal)\b.*\bname\b|\bname\b.*\b(mother|mothers|mom)\b/],
+  ["guardian_name", /\b(guardian|parent)\b.*\bname\b|\bname\b.*\b(guardian|parent)\b/],
   ["applicant_name", /\b(applicant|candidate|student|beneficiary)\b.*\bname\b|\bname\b.*\b(applicant|candidate|student|beneficiary)\b/],
   ["date_of_birth", /\b(date of birth|birth date|dob|born on)\b/],
   ["email", /\b(e mail|email)\b/],
