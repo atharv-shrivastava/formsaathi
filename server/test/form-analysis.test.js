@@ -177,3 +177,83 @@ test("does not send passwords or other blocked controls to AI analysis", () => {
 
   assert.deepEqual(sanitized.map((field) => field.id), ["normal"]);
 });
+
+
+test("matches alternate portal labels and stored fact-key conventions", () => {
+  const aliasFields = [
+    { id: "applicant-full", label: "Applicant's Full Name", name: "applicantFullName", tagName: "input", inputType: "text" },
+    { id: "mobile", label: "Telephone Number", name: "mobileNo", autocomplete: "tel", tagName: "input", inputType: "tel" },
+    { id: "birth", label: "Birth Date", name: "birthdate", tagName: "input", inputType: "text" }
+  ];
+  const aliasFacts = [
+    { id: "a", fact_key: "student_name", fact_label: "Student Full Name", fact_value: "Aarav Kumar Sharma" },
+    { id: "b", fact_key: "mobile_no", fact_label: "Mobile No.", fact_value: "9876543210" },
+    { id: "c", fact_key: "date_of_birth", fact_label: "Date of Birth", fact_value: "12/08/2006" }
+  ];
+  const retrieved = retrieveProfileFactsForFields(aliasFields, aliasFacts);
+  assert.deepEqual(retrieved.map((row) => row.candidates[0]?.factId), ["a", "b", "c"]);
+  assert.deepEqual(retrieved.map((row) => row.candidates[0]?.factValue), [
+    "Aarav Kumar Sharma",
+    "9876543210",
+    "12/08/2006"
+  ]);
+});
+
+test("uses autocomplete metadata for first and last name fields", () => {
+  const nameFields = [
+    { id: "first", label: "Given name", autocomplete: "given-name", tagName: "input", inputType: "text" },
+    { id: "last", label: "Family name", autocomplete: "family-name", tagName: "input", inputType: "text" }
+  ];
+  const fullNameFacts = [{
+    id: "full",
+    fact_key: "applicant_full_name",
+    fact_label: "Applicant full name",
+    fact_value: "Aarav Kumar Sharma"
+  }];
+  const retrieved = retrieveProfileFactsForFields(nameFields, fullNameFacts);
+  assert.deepEqual(retrieved.map((item) => item.candidates[0]?.factValue), ["Aarav", "Sharma"]);
+});
+
+test("does not map an applicant name into a parent's first-name field", () => {
+  const parentField = [{
+    id: "father-first",
+    label: "Father's First Name",
+    tagName: "input",
+    inputType: "text"
+  }];
+  const retrieved = retrieveProfileFactsForFields(parentField, [
+    { id: "applicant", fact_key: "applicant_name", fact_label: "Applicant Name", fact_value: "Aarav Sharma" },
+    { id: "father", fact_key: "father_name", fact_label: "Father Name", fact_value: "Rakesh Sharma" }
+  ]);
+  assert.deepEqual(retrieved[0].candidates, []);
+});
+
+test("accepts custom editable text fields but still blocks non-editable arbitrary containers", () => {
+  const sanitized = sanitizeDetectedFields([
+    { id: "editable", label: "Permanent Address", tagName: "div", inputType: "contenteditable", isContentEditable: true },
+    { id: "fake", label: "Applicant Name", tagName: "div", inputType: "div", isContentEditable: false }
+  ]);
+  assert.deepEqual(sanitized.map((field) => field.id), ["editable"]);
+});
+
+test("validates select mappings against option values as well as visible labels", () => {
+  const field = [{
+    id: "state",
+    label: "State",
+    tagName: "select",
+    inputType: "select",
+    options: ["MP"],
+    optionValues: [{ label: "Madhya Pradesh", value: "MP" }]
+  }];
+  const source = [{
+    id: "state-fact",
+    fact_key: "state",
+    fact_label: "State",
+    fact_value: "Madhya Pradesh"
+  }];
+  const retrieved = retrieveProfileFactsForFields(field, source);
+  const mappings = validateAiMappings([
+    { fieldId: "state", factId: "state-fact", confidence: 0.95 }
+  ], field, retrieved);
+  assert.equal(mappings[0]?.value, "Madhya Pradesh");
+});
