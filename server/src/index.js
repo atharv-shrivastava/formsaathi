@@ -310,7 +310,7 @@ async function loadVerifiedProfileFacts(accessToken) {
   const userClient = createUserScopedClient(accessToken);
   const { data, error } = await userClient
     .from("profile_facts")
-    .select("id,fact_key,fact_value,source_document_id,confidence,updated_at")
+    .select("id,fact_key,fact_label,fact_value,source_document_id,confidence,updated_at")
     .eq("verified", true)
     .order("updated_at", { ascending: false })
     .limit(120);
