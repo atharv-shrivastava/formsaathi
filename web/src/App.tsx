@@ -408,7 +408,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         .neq("review_status", "pending");
       if (reviewedLookupError) throw reviewedLookupError;
       const alreadyReviewed = new Set(
-        (reviewedForDocument || []).map((fact) => fact.fact_key + "\\u0000" + fact.fact_value)
+        (reviewedForDocument || []).map((fact) => fact.fact_key + "\u0000" + fact.fact_value)
       );
       const { error: clearError } = await client
         .from("extracted_facts")
@@ -418,7 +418,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
       if (clearError) throw clearError;
 
       const freshCandidates = extracted.filter((fact) =>
-        !alreadyReviewed.has(fact.key + "\\u0000" + fact.value)
+        !alreadyReviewed.has(fact.key + "\u0000" + fact.value)
       );
       if (freshCandidates.length) {
         const rows = freshCandidates.map((fact: { key: string; label?: string; value: string; confidence?: number; evidence?: string }) => ({
@@ -516,10 +516,10 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
     if (replacements.length > 0) {
       const summary = replacements.slice(0, 6).map((fact) =>
         displayFactKey(fact.fact_key) + ": " + fact.fact_value
-      ).join("\\n");
-      const more = replacements.length > 6 ? "\\n…and " + (replacements.length - 6) + " more" : "";
+      ).join("\n");
+      const more = replacements.length > 6 ? "\n…and " + (replacements.length - 6) + " more" : "";
       if (!window.confirm(
-        "These selected values will replace existing profile values:\\n\\n" + summary + more + "\\n\\nContinue?"
+        "These selected values will replace existing profile values:\n\n" + summary + more + "\n\nContinue?"
       )) return;
     }
 
