@@ -308,14 +308,32 @@ function createUserScopedClient(accessToken) {
 
 async function loadVerifiedProfileFacts(accessToken) {
   const userClient = createUserScopedClient(accessToken);
-  const { data, error } = await userClient
-    .from("profile_facts")
-    .select("id,fact_key,fact_label,fact_value,source_document_id,confidence,updated_at")
-    .eq("verified", true)
-    .order("updated_at", { ascending: false })
-    .limit(120);
-  if (error) throw new Error("Could not retrieve your approved FormSaathi profile values.");
-  return data || [];
+  const [generalResult, documentResult] = await Promise.all([
+    userClient
+      .from("profile_facts")
+      .select("id,fact_key,fact_label,fact_value,source_document_id,confidence,updated_at")
+      .eq("verified", true)
+      .order("updated_at", { ascending: false })
+      .limit(160),
+    userClient
+      .from("document_profile_facts")
+      .select("id,fact_key,fact_label,fact_value,document_id,confidence,updated_at")
+      .eq("verified", true)
+      .order("updated_at", { ascending: false })
+      .limit(240)
+  ]);
+  if (generalResult.error || documentResult.error) {
+    throw new Error("Could not retrieve your approved FormSaathi profile values.");
+  }
+
+  const generalFacts = generalResult.data || [];
+  const documentFacts = (documentResult.data || []).map((fact) => ({
+    ...fact,
+    source_document_id: fact.document_id
+  }));
+  return [...generalFacts, ...documentFacts]
+    .sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || "")))
+    .slice(0, 360);
 }
 
 function getGeminiModel() {
