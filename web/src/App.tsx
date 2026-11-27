@@ -492,7 +492,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
       if (saveError) throw saveError;
       const { error: reviewError } = await client.from("extracted_facts").update({ review_status: "approved" }).eq("id", fact.id);
       if (reviewError) throw reviewError;
-      setMessage("Saved " + displayFactKey(fact.fact_key) + " to your reviewed profile.");
+      setMessage("Saved " + displayFactKey(fact.fact_key) + " under this document. General information was left unchanged.");
       await refreshData();
     } catch (reason) {
       setError(messageFor(reason));
@@ -597,7 +597,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         verified: true
       }, { onConflict: "user_id,fact_key" });
       if (saveError) throw saveError;
-      setMessage(displayFactKey(factKey) + " saved to your verified profile.");
+      setMessage(displayFactKey(factKey) + " saved as general information for future applications.");
       await refreshData();
     } catch (reason) {
       setError(messageFor(reason));
@@ -1055,7 +1055,7 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
         {manualError && <p className="form-error" role="alert">{manualError}</p>}
         <p className="inline-note"><span>ⓘ</span> Manually entered values are marked as user-verified after you save them. Check spelling and numbers carefully. You can update them here at any time.</p>
       </section>
-      <div className="profile-intro"><div><div className="profile-shield">◈</div><div><strong>Your information profile</strong><p>Only values you approve are marked as reviewed and made available for future form matching.</p></div></div><span className="reviewed-count">{verifiedFacts.length} reviewed</span></div>
+      <div className="profile-intro"><div><div className="profile-shield">◈</div><div><strong>Your information profile</strong><p>Approved general information and document-specific values are both available for form matching, with general information preferred when both exist.</p></div></div><span className="reviewed-count">{verifiedFacts.length} reviewed</span></div>
       <section className="surface-card profile-section">
         <div className="section-head"><div><p className="eyebrow">Reusable details</p><h3>General information</h3><p className="muted">Information you entered or chose to keep as your default details across applications.</p></div><span className="soft-badge">{generalFacts.length} fields</span></div>
         {generalFacts.length === 0 ? <EmptyState title="No general information saved" text="Enter details in the manual profile above. These values are the default choices when a portal asks for them." /> : (
@@ -1085,7 +1085,7 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
         )}
       </section>
       <section className="surface-card review-section">
-        <div className="section-head"><div><p className="eyebrow">Needs your review</p><h3>Extracted candidates</h3><p className="muted">Fields stay attached to their source document until you choose which values belong in your reusable profile.</p></div><span className={pendingFacts.length ? "review-count active" : "review-count"}>{pendingFacts.length} pending</span></div>
+        <div className="section-head"><div><p className="eyebrow">Needs your review</p><h3>Extracted candidates</h3><p className="muted">Review each extracted value, then save it to that document's record. Add a separate general value above when you want a reusable default.</p></div><span className={pendingFacts.length ? "review-count active" : "review-count"}>{pendingFacts.length} pending</span></div>
         {pendingFacts.length === 0 ? <EmptyState title="You're all caught up" text="New OCR results will appear here for your review." /> : (
           <>
             <div className="review-bulk-toolbar">
@@ -1096,7 +1096,7 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
                 disabled={busy}
               /><span>Select all detected fields</span></label>
               <button className="button primary candidate-bulk-save" disabled={busy || selectedFactIds.length === 0} onClick={() => onApproveSelected(pendingFacts.filter((fact) => selectedFactIds.includes(fact.id)))}>
-                Save {selectedFactIds.length ? selectedFactIds.length + " selected" : "selected"} to profile
+                Save {selectedFactIds.length ? selectedFactIds.length + " selected" : "selected"} to document records
               </button>
             </div>
             <div className="candidate-document-groups">
