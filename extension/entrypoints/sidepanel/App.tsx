@@ -472,7 +472,7 @@ export default function App() {
           <div className="brand-caption">Your form companion</div>
         </div>
         <div className={apiReady ? "service-pill online" : "service-pill offline"}>
-          <span /> Hosted OCR {apiReady ? "online" : "offline"}
+          <span /> FormSaathi API {apiReady ? "online" : "offline"}
         </div>
       </header>
 
