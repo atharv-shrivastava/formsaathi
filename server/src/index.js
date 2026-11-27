@@ -403,6 +403,7 @@ app.post(
         "Detected fields: " + JSON.stringify(fields),
         "Verified facts: " + JSON.stringify(relevantFacts.map((fact) => ({
           fact_key: fact.fact_key,
+          fact_label: fact.fact_label,
           fact_value: fact.fact_value
         })))
       ].join("\n");
