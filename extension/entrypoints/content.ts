@@ -233,8 +233,15 @@ export default defineContentScript({
   main() {
     chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
       if (message.type === "FS_SCAN") {
-        sendResponse({ ok: true, result: scanPage() });
-        return false;
+        // Let client-rendered forms and delayed portal widgets finish mounting.
+        window.setTimeout(() => {
+          try {
+            sendResponse({ ok: true, result: scanPage() });
+          } catch (error) {
+            sendResponse({ ok: false, error: error instanceof Error ? error.message : "Could not scan this frame." });
+          }
+        }, 350);
+        return true;
       }
       if (message.type === "FS_HIGHLIGHT") {
         sendResponse({ ok: highlightField(message.fieldId, message.label) });
