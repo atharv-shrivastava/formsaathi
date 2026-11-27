@@ -71,7 +71,7 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization"],
   maxAge: 600
 }));
-app.use(express.json({ limit: "256kb" }));
+app.use(express.json({ limit: "512kb" }));
 
 app.get("/health", (_request, response) => {
   response.json({ ok: true, service: "formsaathi-ocr-api" });
