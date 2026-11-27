@@ -1,30 +1,29 @@
 const maxFacts = 100;
 const keyPattern = /^[a-z][a-z0-9_]{1,63}$/;
+const slugPattern = /^[a-z][a-z0-9_]{1,63}$/;
 
 function compact(value, maxLength) {
-  return String(value ?? "").replace(/\\s+/g, " ").trim().slice(0, maxLength);
+  return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 
 function normalizeForMatch(value) {
   return String(value ?? "")
     .normalize("NFKC")
     .toLocaleLowerCase("en-IN")
-    .replace(/\\s+/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
 function slugify(value) {
   const slug = String(value ?? "")
     .normalize("NFKD")
-    .replace(/[\\u0300-\\u036f]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 64);
   return slugPattern.test(slug) ? slug : "";
 }
-
-const slugPattern = /^[a-z][a-z0-9_]{1,63}$/;
 
 function evidenceFromText(text, requestedEvidence, value) {
   const rawEvidence = compact(requestedEvidence, 500);
@@ -34,7 +33,7 @@ function evidenceFromText(text, requestedEvidence, value) {
 
   const normalizedValue = normalizeForMatch(value);
   if (!normalizedValue) return "";
-  const matchingLine = String(text || "").split(/\\r?\\n/)
+  const matchingLine = String(text || "").split(/\r?\n/)
     .map((line) => compact(line, 500))
     .find((line) => normalizeForMatch(line).includes(normalizedValue));
   return matchingLine || "";
@@ -58,7 +57,7 @@ export function buildDocumentExtractionPrompt(ocrText) {
     "----- OCR DOCUMENT TEXT -----",
     String(ocrText || "").slice(0, 40000),
     "----- END OCR DOCUMENT TEXT -----"
-  ].join("\\n");
+  ].join("\n");
 }
 
 export function validateDocumentExtraction(parsed, ocrText) {
@@ -71,7 +70,7 @@ export function validateDocumentExtraction(parsed, ocrText) {
     if (!raw || typeof raw !== "object") continue;
     const label = compact(raw.label, 120);
     const value = compact(raw.value, 500);
-    if (!label || !value || value.length < 1) continue;
+    if (!label || !value) continue;
 
     const modelKey = slugify(raw.key) || slugify(label);
     if (!modelKey || !keyPattern.test(modelKey)) continue;
@@ -85,16 +84,10 @@ export function validateDocumentExtraction(parsed, ocrText) {
       : 0.55;
     if (confidence < 0.35) continue;
 
-    const dedupeKey = modelKey + "\\u0000" + normalizeForMatch(value);
+    const dedupeKey = modelKey + "\u0000" + normalizeForMatch(value);
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
-    facts.push({
-      key: modelKey,
-      label,
-      value,
-      confidence,
-      evidence
-    });
+    facts.push({ key: modelKey, label, value, confidence, evidence });
   }
 
   return { documentType, facts };
@@ -107,7 +100,7 @@ export function mergeDocumentFacts(primaryFacts, fallbackFacts) {
     const key = slugify(fact?.key);
     const value = compact(fact?.value, 500);
     if (!key || !value) continue;
-    const dedupeKey = key + "\\u0000" + normalizeForMatch(value);
+    const dedupeKey = key + "\u0000" + normalizeForMatch(value);
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
     merged.push({
