@@ -7,14 +7,14 @@ import {
 } from "../src/document-extraction.js";
 
 test("prompt asks for broad labelled extraction and treats document contents as data", () => {
-  const prompt = buildDocumentExtractionPrompt("Name: Alex\\nRoll No: 42");
+  const prompt = buildDocumentExtractionPrompt("Name: Alex\nRoll No: 42");
   assert.match(prompt, /regardless of the document category/i);
   assert.match(prompt, /untrusted document data/i);
   assert.match(prompt, /Do not infer missing values/i);
 });
 
 test("validation keeps multiple labelled fields and only evidence grounded in OCR text", () => {
-  const text = "Student Name: Alex Demo\\nRoll Number: 0042\\nBoard: MPBSE";
+  const text = "Student Name: Alex Demo\nRoll Number: 0042\nBoard: MPBSE";
   const result = validateDocumentExtraction({
     documentType: "Class 12 marksheet",
     facts: [
@@ -38,9 +38,9 @@ test("validation normalizes field keys and rejects low-confidence or empty candi
     facts: [
       { key: "Consumer Number", label: "Consumer Number", value: "A-1092", confidence: 0.8, evidence: "Consumer Number A-1092" },
       { key: "Meter", label: "Meter Number", value: "M123", confidence: 0.1, evidence: "Meter Number M123" },
-      { key: "bad key!", label: "Reading Date", value: "2026-11-27", confidence: 0.9, evidence: "Reading Date 2026-11-27" }
+      { key: "!", label: "", value: "2026-11-27", confidence: 0.9, evidence: "Reading Date 2026-11-27" }
     ]
-  }, "Consumer Number A-1092\\nMeter Number M123\\nReading Date 2026-11-27");
+  }, "Consumer Number A-1092\nMeter Number M123\nReading Date 2026-11-27");
 
   assert.equal(result.facts.length, 1);
   assert.equal(result.facts[0].key, "consumer_number");
