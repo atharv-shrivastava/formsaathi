@@ -248,7 +248,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
     const [documentResult, factResult, profileResult, documentProfileResult, applicationResult] = await Promise.all([
       client.from("documents").select("*").order("created_at", { ascending: false }),
       client.from("extracted_facts").select("*").order("created_at", { ascending: false }).limit(300),
-      client.from("profile_facts").select("*").order("fact_key", { ascending: true }),
+      client.from("profile_facts").select("*").is("source_document_id", null).order("fact_key", { ascending: true }),
       client.from("document_profile_facts").select("*").order("fact_key", { ascending: true }),
       client.from("applications").select("*").order("created_at", { ascending: false })
     ]);
