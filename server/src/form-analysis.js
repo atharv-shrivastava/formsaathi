@@ -6,22 +6,23 @@ const MAX_CANDIDATES_PER_FIELD = 6;
 // Regex signals are deliberately broad retrieval hints, not permission to autofill.
 // The model proposes a mapping; the validator still checks the exact retrieved fact.
 const semanticPatterns = [
-  ["first_name", /\b(first ?name|given ?name)\b|\b(forename|fname)\b/],
-  ["last_name", /\b(last ?name|family ?name)\b|\b(surname|lname)\b/],
+  ["blocked_name_component", /\b(father|fathers|dad|mother|mothers|mom|guardian|parent)\b.*\b(first|given|last|family|surname)\s+name\b/],
   ["father_name", /\b(father|fathers|dad|paternal)\b.*\bname\b|\bname\b.*\b(father|fathers|dad)\b/],
   ["mother_name", /\b(mother|mothers|mom|maternal)\b.*\bname\b|\bname\b.*\b(mother|mothers|mom)\b/],
   ["guardian_name", /\b(guardian|parent)\b.*\bname\b|\bname\b.*\b(guardian|parent)\b/],
-  ["applicant_name", /\b(applicant|candidate|student|beneficiary)\b.*\bname\b|\bname\b.*\b(applicant|candidate|student|beneficiary)\b/],
-  ["date_of_birth", /\b(date of birth|birth date|dob|born on)\b/],
-  ["email", /\b(e mail|email)\b/],
-  ["phone", /\b(mobile|phone|telephone|contact number|whatsapp)\b/],
-  ["postal_code", /\b(pin code|pincode|postal code|zip code|postcode)\b/],
+  ["first_name", /\b(first ?name|given ?name|applicant first name|student first name)\b|\b(forename|fname)\b/],
+  ["last_name", /\b(last ?name|family ?name|applicant last name|student last name)\b|\b(surname|lname)\b/],
+  ["applicant_name", /\b(applicant|candidate|student|beneficiary)\b.*\b(name|fullname|full name)\b|\b(name|fullname|full name)\b.*\b(applicant|candidate|student|beneficiary)\b|\bfull name\b/],
+  ["date_of_birth", /\b(date of birth|birth date|birthdate|dob|born on)\b/],
+  ["email", /\b(e mail|email|email id)\b/],
+  ["phone", /\b(mobile|phone|telephone|contact number|whatsapp|cell phone)\b/],
+  ["postal_code", /\b(pin code|pincode|postal code|zip code|zipcode|postcode)\b/],
   ["ifsc", /\b(ifsc)\b/],
-  ["bank_account", /\b(bank account|account number|account no|a c number)\b/],
-  ["annual_income", /\b(annual|yearly|family|household)?\s*income\b/],
-  ["percentage", /\b(percentage|percent|aggregate marks|marks obtained|cgpa|sgpa)\b/],
+  ["bank_account", /\b(bank account|account number|account no|a c number|a c no)\b/],
+  ["annual_income", /\b(annual|yearly|family|household|monthly)?\s*income\b/],
+  ["percentage", /\b(percentage|percent|aggregate marks|marks obtained|cgpa|sgpa|class 12 marks)\b/],
   ["gender", /\b(gender|sex)\b/],
-  ["address", /\b(address|residential|permanent|correspondence|street|locality)\b/],
+  ["address", /\b(address|residential|permanent|correspondence|street|locality|house number)\b/],
   ["state", /\b(state|province)\b/],
   ["city", /\b(city|town|district headquarters)\b/],
   ["country", /\b(country|nation)\b/],
@@ -29,26 +30,42 @@ const semanticPatterns = [
 ];
 
 const factAliases = {
-  applicant_name: ["applicant name", "name of applicant", "student name", "candidate name", "full name"],
+  applicant_name: ["applicant name", "name of applicant", "student name", "candidate name", "beneficiary name", "full name", "name"],
+  applicant_full_name: ["applicant name", "name of applicant", "student name", "candidate name", "full name"],
   full_name: ["applicant name", "name of applicant", "student name", "candidate name", "full name"],
-  father_name: ["father", "father name", "name of father"],
-  mother_name: ["mother", "mother name", "name of mother"],
-  guardian_name: ["guardian", "guardian name", "name of guardian"],
-  date_of_birth: ["date of birth", "birth date", "dob"],
-  mobile_number: ["mobile number", "mobile no", "phone number", "contact number", "telephone"],
-  phone_number: ["mobile number", "mobile no", "phone number", "contact number", "telephone"],
-  email: ["email", "e mail", "email address"],
-  email_address: ["email", "e mail", "email address"],
-  annual_income: ["annual income", "family income", "annual family income", "income per year"],
-  family_income: ["annual income", "family income", "annual family income", "income per year"],
-  bank_account_number: ["bank account number", "account number", "account no"],
+  student_name: ["student name", "name of student", "applicant name", "full name"],
+  candidate_name: ["candidate name", "name of candidate", "applicant name", "full name"],
+  father_name: ["father", "father name", "name of father", "father full name"],
+  fathers_name: ["father", "father name", "name of father", "father full name"],
+  mother_name: ["mother", "mother name", "name of mother", "mother full name"],
+  mothers_name: ["mother", "mother name", "name of mother", "mother full name"],
+  guardian_name: ["guardian", "guardian name", "name of guardian", "parent name"],
+  date_of_birth: ["date of birth", "birth date", "birthdate", "dob"],
+  dob: ["date of birth", "birth date", "birthdate", "dob"],
+  mobile_number: ["mobile number", "mobile no", "mobile", "phone number", "contact number", "telephone", "cell phone", "whatsapp"],
+  mobile_no: ["mobile number", "mobile no", "mobile", "phone number", "contact number", "telephone"],
+  phone_number: ["mobile number", "mobile no", "phone number", "contact number", "telephone", "cell phone"],
+  telephone_number: ["mobile number", "phone number", "contact number", "telephone"],
+  email: ["email", "e mail", "email address", "email id"],
+  email_address: ["email", "e mail", "email address", "email id"],
+  email_id: ["email", "e mail", "email address", "email id"],
+  annual_income: ["annual income", "family income", "annual family income", "income per year", "yearly income"],
+  family_income: ["annual income", "family income", "annual family income", "income per year", "yearly income"],
+  household_income: ["annual income", "household income", "family income", "income per year"],
+  bank_account_number: ["bank account number", "account number", "account no", "a c number"],
+  account_number: ["bank account number", "account number", "account no", "a c number"],
   ifsc_code: ["ifsc", "ifsc code"],
-  postal_code: ["postal code", "pin code", "pincode", "zip code"],
-  pincode: ["postal code", "pin code", "pincode", "zip code"],
-  percentage: ["percentage", "marks percentage", "aggregate marks", "class 12 percentage"],
-  caste_category: ["caste", "category", "social category"],
+  ifsc: ["ifsc", "ifsc code"],
+  postal_code: ["postal code", "pin code", "pincode", "zip code", "zipcode", "postcode"],
+  pincode: ["postal code", "pin code", "pincode", "zip code", "zipcode", "postcode"],
+  pin_code: ["postal code", "pin code", "pincode", "zip code", "zipcode", "postcode"],
+  percentage: ["percentage", "marks percentage", "aggregate marks", "class 12 percentage", "12th percentage"],
+  caste_category: ["caste", "category", "social category", "reservation category"],
   gender: ["gender", "sex"],
-  address: ["address", "residential address", "permanent address", "correspondence address"]
+  address: ["address", "residential address", "permanent address", "correspondence address", "current address", "present address"],
+  state: ["state", "state name", "province"],
+  city: ["city", "city name", "town"],
+  district: ["district", "district name"]
 };
 
 function normalize(value) {
@@ -62,7 +79,16 @@ function normalize(value) {
 }
 
 function fieldSearchText(field) {
-  return normalize([field.label, field.name, field.placeholder].filter(Boolean).join(" "));
+  return normalize([
+    field.label,
+    field.name,
+    field.placeholder,
+    field.autocomplete,
+    field.role,
+    field.dataLabel,
+    field.nearbyText,
+    field.isContentEditable ? "contenteditable textbox" : ""
+  ].filter(Boolean).join(" "));
 }
 
 function factSearchText(fact) {
@@ -87,6 +113,7 @@ function isNameKind(kind) {
 }
 
 function semanticCompatibility(fieldKind, factKind) {
+  if (fieldKind === "blocked_name_component") return false;
   if (!fieldKind || !factKind) return true;
   if (fieldKind === factKind) return true;
 
@@ -112,7 +139,8 @@ function splitApplicantName(value) {
 
 function isApplicantFullNameFact(fact) {
   const key = String(fact.fact_key || "").toLowerCase().replace(/[ -]/g, "_");
-  return applicantFullNameKeys.has(key);
+  return applicantFullNameKeys.has(key) ||
+    ["applicant name", "name of applicant", "student name", "candidate name", "full name"].includes(normalize(fact.fact_label));
 }
 
 function valueForField(fieldKind, fact) {
@@ -243,7 +271,8 @@ export function sanitizeDetectedFields(rawFields) {
     const tagName = String(raw.tagName || "").toLowerCase();
     const inputType = String(raw.inputType || tagName).toLowerCase().slice(0, 40);
     if (!id || !/^[a-zA-Z0-9_-]+$/.test(id) || seen.has(id)) continue;
-    if (!["input", "textarea", "select"].includes(tagName)) continue;
+    const isContentEditable = raw.isContentEditable === true;
+    if (!["input", "textarea", "select"].includes(tagName) && !(tagName === "div" && isContentEditable)) continue;
     if (blockedInputTypes.has(inputType)) continue;
     if (isFeedbackTextarea(raw)) continue;
     seen.add(id);
@@ -251,7 +280,15 @@ export function sanitizeDetectedFields(rawFields) {
     const options = Array.isArray(raw.options)
       ? raw.options.filter((value) => typeof value === "string")
         .map((value) => value.trim().slice(0, 100))
-        .filter(Boolean).slice(0, 30)
+        .filter(Boolean).slice(0, 40)
+      : [];
+    const optionValues = Array.isArray(raw.optionValues)
+      ? raw.optionValues.filter((value) => value && typeof value === "object")
+        .map((value) => ({
+          label: String(value.label || "").trim().slice(0, 100),
+          value: String(value.value || "").trim().slice(0, 100)
+        }))
+        .slice(0, 40)
       : [];
 
     fields.push({
@@ -262,7 +299,13 @@ export function sanitizeDetectedFields(rawFields) {
       required: raw.required === true,
       placeholder: String(raw.placeholder || "").trim().slice(0, 160),
       name: String(raw.name || "").trim().slice(0, 120),
+      autocomplete: String(raw.autocomplete || "").trim().slice(0, 120),
+      role: String(raw.role || "").trim().slice(0, 80),
+      nearbyText: String(raw.nearbyText || "").trim().slice(0, 180),
+      dataLabel: String(raw.dataLabel || "").trim().slice(0, 120),
+      isContentEditable,
       options,
+      optionValues,
       isFile: raw.isFile === true || inputType === "file"
     });
   }
@@ -296,9 +339,14 @@ export function validateAiMappings(rawMappings, fields, retrievedFacts) {
     const factKind = semanticKind([candidate.factLabel, candidate.factKey].filter(Boolean).join(" "));
     if (!semanticCompatibility(fieldKind, factKind)) continue;
 
-    if (field.tagName === "select" && field.options.length > 0) {
-      const exactOption = field.options.some((option) =>
-        normalize(option) === normalize(candidate.factValue)
+    if (field.tagName === "select" && (field.options.length > 0 || field.optionValues.length > 0)) {
+      const candidates = [
+        ...field.options.map((option) => ({ label: option, value: option })),
+        ...field.optionValues
+      ];
+      const exactOption = candidates.some((option) =>
+        normalize(option.label) === normalize(candidate.factValue) ||
+        normalize(option.value) === normalize(candidate.factValue)
       );
       if (!exactOption) continue;
     }
