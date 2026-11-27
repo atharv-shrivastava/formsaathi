@@ -4,7 +4,9 @@ const aliases: Record<string, string[]> = {
   first_name: ["first name", "firstname", "given name", "forename", "fname"],
   last_name: ["last name", "lastname", "surname", "family name", "lname"],
   applicant_name: ["applicant name", "applicants name", "name of applicant", "candidate name", "student name", "full name", "name"],
-  father_name: ["father name", "fathers name", "name of father", "guardian name", "name of guardian", "parent name"],
+  father_name: ["father name", "fathers name", "name of father"],
+  mother_name: ["mother name", "mothers name", "name of mother"],
+  guardian_name: ["guardian name", "name of guardian", "parent name", "parents name"],
   date_of_birth: ["date of birth", "dob", "birth date"],
   annual_income: ["annual family income", "family income", "annual income", "income"],
   percentage: ["class 12 percentage", "12th percentage", "aggregate percentage", "marks percentage", "percentage"],
@@ -38,7 +40,7 @@ export function canonicalFieldKey(field: PortalField): string | null {
 
 export function categoryForKey(key: string | null): DocumentCategory | null {
   if (!key) return null;
-  if (["applicant_name", "father_name", "date_of_birth", "first_name", "last_name"].includes(key)) return "identity";
+  if (["applicant_name", "father_name", "mother_name", "guardian_name", "date_of_birth", "first_name", "last_name"].includes(key)) return "identity";
   if (key === "annual_income") return "income";
   if (key === "percentage") return "education";
   if (["bank_account_number", "ifsc_code"].includes(key)) return "bank";
@@ -62,8 +64,10 @@ function isApplicantFullNameFact(fact: CandidateFact): boolean {
 
 function deriveFullNamePart(key: string, value: string): string {
   const parts = String(value || "").trim().split(/\s+/).filter(Boolean);
-  if (parts.length < 2) return "";
-  return key === "first_name" ? parts[0] : parts[parts.length - 1];
+  const firstName = parts[0];
+  const lastName = parts.at(-1);
+  if (!firstName || !lastName || parts.length < 2) return "";
+  return key === "first_name" ? firstName : lastName;
 }
 
 export function createReviewRows(
@@ -106,6 +110,7 @@ export function createReviewRows(
     }
 
     const candidate = candidates.sort((a, b) => b.confidence - a.confidence)[0];
+    if (!candidate) return { field, canonicalKey: key, value: "", status: "unmapped" };
     return {
       field,
       canonicalKey: key,

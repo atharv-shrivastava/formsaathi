@@ -31,7 +31,9 @@ function getLabel(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectEl
       .filter(Boolean).join(" ");
     if (text) return text;
   }
-  if (element.placeholder) return element.placeholder.trim();
+  if ((element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) && element.placeholder) {
+    return element.placeholder.trim();
+  }
   if (element.name) return element.name.replace(/[_-]/g, " ");
   if (element.id) return element.id.replace(/[_-]/g, " ");
   const parentText = element.parentElement?.innerText?.trim().replace(/\s+/g, " ") || "";
@@ -52,11 +54,11 @@ function isFeedbackTextarea(element: HTMLTextAreaElement): boolean {
 }
 
 function scanPage(): ScanResult {
-  const selector = "input:not([type='hidden']):not([type='checkbox']):not([type='radio']):not([type='submit']):not([type='button']):not([type='reset']), textarea, select";
+  const selector = "input:not([type='hidden']):not([type='password']):not([type='checkbox']):not([type='radio']):not([type='submit']):not([type='button']):not([type='reset']), textarea, select";
   const elements = Array.from(document.querySelectorAll<HTMLElement>(selector))
     .filter((element) => {
       if (!isVisible(element)) return false;
-      if (element instanceof HTMLInputElement && ["checkbox", "radio"].includes(element.type)) return false;
+      if (element instanceof HTMLInputElement && ["hidden", "password", "checkbox", "radio", "submit", "button", "reset"].includes(element.type)) return false;
       if (element instanceof HTMLTextAreaElement && isFeedbackTextarea(element)) return false;
       return true;
     });

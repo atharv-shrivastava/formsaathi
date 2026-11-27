@@ -59,3 +59,27 @@ test("merge prefers Gemini values and adds rule-based fallback values without du
   assert.equal(facts[0].confidence, 0.92);
   assert.equal(facts[1].key, "date_of_birth");
 });
+
+test("rejects a hallucinated value even when the model cites a genuine but unrelated OCR line", () => {
+  const result = validateDocumentExtraction({
+    documentType: "Identity document",
+    facts: [
+      {
+        key: "roll_number",
+        label: "Roll Number",
+        value: "9999",
+        confidence: 0.99,
+        evidence: "Roll Number: 0042"
+      },
+      {
+        key: "roll_number_short",
+        label: "Roll Number",
+        value: "004",
+        confidence: 0.99,
+        evidence: "Roll Number: 0042"
+      }
+    ]
+  }, "Student Name: Alex Demo\nRoll Number: 0042");
+
+  assert.deepEqual(result.facts, []);
+});

@@ -28,7 +28,7 @@ test("sanitizes detected fields and rejects duplicate or malformed controls", ()
     { id: "bad id", label: "Bad ID", tagName: "input", inputType: "text" },
     { id: "frame", label: "Frame", tagName: "iframe", inputType: "text" }
   ]);
-  assert.deepEqual(sanitized.map((field) => field.id), ["name-field", "father-field", "state-field", "upload-field"]);
+  assert.deepEqual(sanitized.map((field) => field.id), ["name-field", "father-field", "state-field"]);
 });
 
 test("does not forward checkboxes, radio buttons or feedback textareas to analysis", () => {
@@ -164,4 +164,16 @@ test("does not allow Gemini to cross applicant, father, mother or guardian name 
     { fieldId: "mother", factId: "m", confidence: 0.94 }
   ], nameFields, retrieved);
   assert.deepEqual(mappings.map((mapping) => [mapping.fieldId, mapping.factId]), [["mother", "m"]]);
+});
+
+test("does not send passwords or other blocked controls to AI analysis", () => {
+  const sanitized = sanitizeDetectedFields([
+    { id: "password", label: "Password", tagName: "input", inputType: "password" },
+    { id: "hidden", label: "Session token", tagName: "input", inputType: "hidden" },
+    { id: "upload", label: "Upload document", tagName: "input", inputType: "file", isFile: true },
+    { id: "submit", label: "Submit", tagName: "input", inputType: "submit" },
+    { id: "normal", label: "Applicant Name", tagName: "input", inputType: "text" }
+  ]);
+
+  assert.deepEqual(sanitized.map((field) => field.id), ["normal"]);
 });

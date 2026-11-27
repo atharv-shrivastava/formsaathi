@@ -115,8 +115,8 @@ export default function App() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
-      setStatus("Use a PDF or image file.");
+    if (!["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setStatus("Use a PDF, JPEG, PNG or WebP file.");
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -323,6 +323,10 @@ export default function App() {
 
   async function approveFill(index: number) {
     const row = rows[index];
+    if (!row) {
+      setStatus("This field review is no longer available. Scan the page again.");
+      return;
+    }
     if (!row.value.trim()) {
       setStatus("Enter a value before approving this field.");
       return;
@@ -468,7 +472,7 @@ export default function App() {
           <div className="brand-caption">Your form companion</div>
         </div>
         <div className={apiReady ? "service-pill online" : "service-pill offline"}>
-          <span /> Hosted OCR {apiReady ? "online" : "offline"}
+          <span /> FormSaathi API {apiReady ? "online" : "offline"}
         </div>
       </header>
 
@@ -510,7 +514,7 @@ export default function App() {
             {categories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
           <label className="upload-button">
-            <input type="file" accept="application/pdf,image/*" onChange={handleUpload} />
+            <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={handleUpload} />
             <span>＋ Add PDF or image</span>
           </label>
           <div className="prepare-settings">

@@ -113,7 +113,7 @@ function SetupScreen() {
     <main className="setup-screen">
       <div className="setup-card">
         <div className="brand-mark large">F</div>
-        <p className="eyebrow">FORMsaathi · FIRST-TIME SETUP</p>
+        <p className="eyebrow">First-time setup</p>
         <h1>Connect your Supabase project.</h1>
         <p className="muted">The web app is ready, but it needs your project URL and publishable key before accounts and private storage can work.</p>
         <ol className="setup-steps">
@@ -179,7 +179,7 @@ function AuthScreen() {
       <section className="auth-story">
         <div className="brand-lockup"><div className="brand-mark">F</div><span>FormSaathi</span></div>
         <div className="story-copy">
-          <p className="eyebrow light">LESS PAPERWORK. MORE CLARITY.</p>
+          <p className="eyebrow light">Less paperwork, more clarity</p>
           <h1>Government forms shouldn't feel like a maze.</h1>
           <p>Keep your documents organised, understand what a form needs and stay in control of every field you fill.</p>
           <div className="story-points">
@@ -192,7 +192,7 @@ function AuthScreen() {
       </section>
       <section className="auth-panel">
         <div className="auth-card">
-          <p className="eyebrow">{mode === "signup" ? "GET STARTED" : "WELCOME BACK"}</p>
+          <p className="eyebrow">{mode === "signup" ? "Create an account" : "Welcome back"}</p>
           <h2>{mode === "signup" ? "Create your account" : "Sign in to FormSaathi"}</h2>
           <p className="muted">{mode === "signup" ? "Your personal workspace starts here." : "Pick up where you left off."}</p>
           <form onSubmit={submit} className="auth-form">
@@ -703,18 +703,13 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         <div className="workspace-label">WORKSPACE</div>
         <nav className="side-nav" aria-label="Main navigation">
           {nav.map((item) => (
-            <button key={item.id} className={page === item.id ? "nav-item active" : "nav-item"} onClick={() => { setPage(item.id); clearNotice(); }}>
+            <button key={item.id} className={page === item.id ? "nav-item active" : "nav-item"} aria-current={page === item.id ? "page" : undefined} onClick={() => { setPage(item.id); clearNotice(); }}>
               <span className="nav-icon">{item.icon}</span><span>{item.label}</span>
               {item.id === "profile" && pendingFacts.length > 0 && <span className="nav-count">{pendingFacts.length}</span>}
             </button>
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="sidebar-help">
-            <div className="help-symbol">?</div>
-            <strong>Need a hand?</strong>
-            <p>FormSaathi guides you. You stay in control.</p>
-          </div>
           <div className="user-card">
             <div className="avatar">{(user.user_metadata?.full_name || user.email || "F").slice(0, 1).toUpperCase()}</div>
             <div className="user-meta"><strong>{displayName}</strong><span>{user.email}</span></div>
@@ -730,7 +725,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         </header>
         <div className="page-wrap">
           <div className="page-heading">
-            <div><p className="eyebrow">YOUR SPACE</p><h1>{pageInfo.title}</h1><p>{pageInfo.subtitle}</p></div>
+            <div><p className="eyebrow">Your space</p><h1>{pageInfo.title}</h1><p>{pageInfo.subtitle}</p></div>
           </div>
 
           {message && <div className="notice success-notice" role="status"><span>✓</span>{message}<button onClick={() => setMessage("")} aria-label="Dismiss">×</button></div>}
@@ -823,11 +818,51 @@ interface OverviewPageProps {
 function OverviewPage({ name, documents, verifiedFacts, pendingFacts, applications, onNavigate }: OverviewPageProps) {
   const extractedCount = documents.filter((document) => document.status === "extracted").length;
   const inProgress = applications.filter((application) => application.status !== "submitted").length;
+  const setupComplete = [documents.length > 0, extractedCount > 0, verifiedFacts.length > 0].filter(Boolean).length;
+
+  let nextStepTitle = "Your profile is ready";
+  let nextStepDescription = "Approved details are available for supported form matching.";
+  let nextStepAction = "View profile";
+  let nextStepPage: Page = "profile";
+
+  if (pendingFacts.length > 0) {
+    nextStepTitle = pendingFacts.length + " detail" + (pendingFacts.length === 1 ? "" : "s") + " waiting for review";
+    nextStepDescription = "Check each extracted value before adding it to your profile.";
+    nextStepAction = "Review details";
+    nextStepPage = "profile";
+  } else if (documents.length === 0) {
+    nextStepTitle = "Add your first document";
+    nextStepDescription = "Start with a PDF or a clear photo of a document you use often.";
+    nextStepAction = "Open document vault";
+    nextStepPage = "documents";
+  } else if (verifiedFacts.length === 0) {
+    nextStepTitle = "Add details to your profile";
+    nextStepDescription = "Enter key information once, or review values extracted from a document.";
+    nextStepAction = "Open profile";
+    nextStepPage = "profile";
+  } else if (inProgress > 0) {
+    nextStepTitle = "Continue an application";
+    nextStepDescription = "You have " + inProgress + " application" + (inProgress === 1 ? "" : "s") + " in progress.";
+    nextStepAction = "View applications";
+    nextStepPage = "applications";
+  }
+
   return (
     <div className="page-content">
       <section className="welcome-banner">
-        <div><p className="eyebrow light">YOUR FORM COMPANION</p><h2>Good to see you, {name}.</h2><p>Get your documents in order now. FormSaathi will use only the information relevant to the form you are working on.</p><button className="button white-button" onClick={() => onNavigate("documents")}>Open document vault <span>→</span></button></div>
-        <div className="welcome-art" aria-hidden="true"><div className="art-orbit orbit-one" /><div className="art-orbit orbit-two" /><div className="art-paper"><div className="paper-pin" /><span /><span /><span /><b>✓</b></div><div className="art-check">✓</div></div>
+        <div className="welcome-copy">
+          <p className="eyebrow">Your form companion</p>
+          <h2>Good to see you, {name}.</h2>
+          <p>Keep the documents and approved details you need for applications in one place.</p>
+        </div>
+        <aside className="next-step-card" aria-label="Suggested next step">
+          <div>
+            <p className="eyebrow">Suggested next step</p>
+            <strong>{nextStepTitle}</strong>
+            <p>{nextStepDescription}</p>
+          </div>
+          <button className="button primary" onClick={() => onNavigate(nextStepPage)}>{nextStepAction}<span>→</span></button>
+        </aside>
       </section>
       <section className="stat-grid">
         <StatCard label="Documents stored" value={documents.length} detail={extractedCount + " processed"} icon="▤" />
@@ -837,26 +872,24 @@ function OverviewPage({ name, documents, verifiedFacts, pendingFacts, applicatio
       </section>
       <div className="section-grid">
         <section className="surface-card setup-card-main">
-          <div className="section-head"><div><p className="eyebrow">GETTING STARTED</p><h3>Your setup checklist</h3></div><span className="soft-badge">MVP</span></div>
+          <div className="section-head"><div><p className="eyebrow">Getting started</p><h3>Your setup checklist</h3></div><span className="soft-badge">{setupComplete} of 3 complete</span></div>
           <div className="checklist">
             <ChecklistItem complete={documents.length > 0} title="Add your documents" description="Upload a PDF or a clear image." onClick={() => onNavigate("documents")} />
             <ChecklistItem complete={extractedCount > 0} title="Extract information" description="Run OCR on a document you choose." onClick={() => onNavigate("documents")} />
             <ChecklistItem complete={verifiedFacts.length > 0} title="Review your profile" description="Approve the values you want to keep." onClick={() => onNavigate("profile")} />
-            <ChecklistItem complete={false} title="Connect your browser extension" description="Use your FormSaathi account to scan supported online forms." onClick={() => onNavigate("extension")} />
           </div>
         </section>
         <section className="surface-card recent-card">
-          <div className="section-head"><div><p className="eyebrow">DOCUMENT VAULT</p><h3>Recently added</h3></div><button className="text-button" onClick={() => onNavigate("documents")}>View all →</button></div>
+          <div className="section-head"><div><p className="eyebrow">Document vault</p><h3>Recently added</h3></div><button className="text-button" onClick={() => onNavigate("documents")}>View all →</button></div>
           {documents.length === 0 ? <EmptyState title="Your vault is empty" text="Add your first document to begin building your profile." /> : (
             <div className="recent-list">{documents.slice(0, 4).map((document) => <DocumentLine key={document.id} document={document} />)}</div>
           )}
         </section>
       </div>
-      <section className="extension-strip"><div className="extension-icon">↗</div><div><strong>Works with your browser</strong><p>The extension will use the reviewed profile from this account after secure account pairing is added.</p></div><span className="coming-pill">PAIRING NEXT</span></section>
+      <section className="extension-strip"><div className="extension-icon">↗</div><div><strong>Browser extension available</strong><p>Install the Chrome extension and sign in with this same account. Approved profile facts sync for form matching.</p></div><button type="button" className="text-button" onClick={() => onNavigate("extension")}>View setup →</button></section>
     </div>
   );
 }
-
 function StatCard({ label, value, detail, icon, accent = false }: { label: string; value: number; detail: string; icon: string; accent?: boolean }) {
   return <div className="stat-card"><div className="stat-top"><span>{label}</span><b className={accent ? "stat-icon warm" : "stat-icon"}>{icon}</b></div><strong className="stat-value">{value}</strong><span className="stat-detail">{detail}</span></div>;
 }
@@ -886,10 +919,10 @@ function DocumentsPage({
         <div className="upload-main"><div className="upload-copy"><div className="upload-symbol">＋</div><div><h3>Add a document</h3><p>PDF, JPG, PNG or WebP · Up to 10 MB. Any document category can be processed.</p></div></div><label className="cloud-consent"><input type="checkbox" checked={cloudConsent} onChange={(event) => onCloudConsentChange(event.target.checked)} /><span>I understand this uploads a copy to my private FormSaathi cloud vault. I will use synthetic documents for this MVP demo.</span></label></div>
         <div className="upload-controls"><label className="category-picker"><span>Vault category (for organisation only)</span><select value={category} onChange={(event) => onCategoryChange(event.target.value as DocumentCategory)}>{categoryOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label className={!cloudConsent || busy ? "button primary disabled" : "button primary"}>Choose file<input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" onChange={onUpload} disabled={!cloudConsent || busy} hidden /></label></div>
       </section>
-      <div className="section-head document-list-head"><div><p className="eyebrow">YOUR PRIVATE STORAGE</p><h3>Uploaded documents <span className="inline-count">{documents.length}</span></h3></div><span className="vault-label">⌑ Private vault</span></div>
+      <div className="section-head document-list-head"><div><p className="eyebrow">Your private storage</p><h3>Uploaded documents <span className="inline-count">{documents.length}</span></h3></div><span className="vault-label">⌑ Private vault</span></div>
       {documents.length === 0 ? <section className="surface-card empty-large"><div className="empty-illustration">▤</div><h3>No documents yet</h3><p>Upload any supported document. FormSaathi detects its type and extracts labelled fields regardless of the selected vault category.</p></section> : (
         <div className="document-table surface-card">
-          <div className="table-heading"><span>DOCUMENT</span><span>CATEGORY</span><span>ADDED</span><span>STATUS</span><span>ACTIONS</span></div>
+          <div className="table-heading"><span>Document</span><span>Category</span><span>Added</span><span>Status</span><span>Actions</span></div>
           {documents.map((document) => (
             <div className="document-row" key={document.id}>
               <div className="document-name"><div className="file-icon">{document.mime_type === "application/pdf" ? "PDF" : "IMG"}</div><div><strong>{document.filename}</strong><small>{document.document_type ? "Detected: " + document.document_type : formatBytes(document.size_bytes)}</small></div></div>
@@ -976,7 +1009,7 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
   return (
     <div className="page-content">
       <section className="surface-card manual-profile-card">
-        <div className="section-head"><div><p className="eyebrow">ENTER INFORMATION YOURSELF</p><h3>Manual profile entry</h3><p className="muted">No document upload or OCR required. Save each value to make it available to the extension.</p></div><span className="soft-badge">You control the data</span></div>
+        <div className="section-head"><div><p className="eyebrow">Enter information yourself</p><h3>Manual profile entry</h3><p className="muted">No document upload or OCR required. Save each value to make it available to the extension.</p></div><span className="soft-badge">You control the data</span></div>
         <div className="manual-profile-grid">
           {manualFields.map((field) => (
             <label className="manual-profile-field" key={field.key}>
@@ -1001,7 +1034,7 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
       </section>
       <div className="profile-intro"><div><div className="profile-shield">◈</div><div><strong>Your information profile</strong><p>Only values you approve are marked as reviewed and made available for future form matching.</p></div></div><span className="reviewed-count">{verifiedFacts.length} reviewed</span></div>
       <section className="surface-card profile-section">
-        <div className="section-head"><div><p className="eyebrow">SAVED INFORMATION</p><h3>Reviewed profile</h3></div><span className="soft-badge">{verifiedFacts.length} fields</span></div>
+        <div className="section-head"><div><p className="eyebrow">Saved information</p><h3>Reviewed profile</h3></div><span className="soft-badge">{verifiedFacts.length} fields</span></div>
         {verifiedFacts.length === 0 ? <EmptyState title="Nothing verified yet" text="Enter information manually above or run OCR on a document and approve the values you want to save here." /> : (
           <div className="fact-grid">{verifiedFacts.map((fact) => (
             <div className="fact-card" key={fact.id}><div className="fact-label">{fact.fact_label || displayFactKey(fact.fact_key)} <span className="verified-dot">✓ Reviewed</span></div><strong>{fact.fact_value}</strong><small>Source: {fact.source_document_id ? docName(fact.source_document_id) : "Manually added"}</small></div>
@@ -1009,7 +1042,7 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
         )}
       </section>
       <section className="surface-card review-section">
-        <div className="section-head"><div><p className="eyebrow">NEEDS YOUR DECISION</p><h3>Extracted candidates</h3><p className="muted">Fields stay attached to their source document until you choose which values belong in your reusable profile.</p></div><span className={pendingFacts.length ? "review-count active" : "review-count"}>{pendingFacts.length} pending</span></div>
+        <div className="section-head"><div><p className="eyebrow">Needs your review</p><h3>Extracted candidates</h3><p className="muted">Fields stay attached to their source document until you choose which values belong in your reusable profile.</p></div><span className={pendingFacts.length ? "review-count active" : "review-count"}>{pendingFacts.length} pending</span></div>
         {pendingFacts.length === 0 ? <EmptyState title="You're all caught up" text="New OCR results will appear here for your review." /> : (
           <>
             <div className="review-bulk-toolbar">
@@ -1106,10 +1139,10 @@ function ApplicationsPage({ applications, title, url, onTitleChange, onUrlChange
   return (
     <div className="page-content">
       <form className="surface-card application-form" onSubmit={onAdd}>
-        <div><p className="eyebrow">NEW TRACKER</p><h3>Add an application</h3><p>Keep a simple record of forms you're preparing.</p></div>
+        <div><p className="eyebrow">New tracker</p><h3>Add an application</h3><p>Keep a simple record of forms you're preparing.</p></div>
         <div className="application-fields"><label>Application name<input value={title} onChange={(event) => onTitleChange(event.target.value)} placeholder="e.g. Post-matric scholarship" required /></label><label>Official portal URL <span className="optional">(optional)</span><input type="url" value={url} onChange={(event) => onUrlChange(event.target.value)} placeholder="https://official-portal.gov.in" /></label><button className="button primary" type="submit">Add to tracker <span>→</span></button></div>
       </form>
-      <div className="section-head document-list-head"><div><p className="eyebrow">YOUR TRACKER</p><h3>Applications <span className="inline-count">{applications.length}</span></h3></div></div>
+      <div className="section-head document-list-head"><div><p className="eyebrow">Your tracker</p><h3>Applications <span className="inline-count">{applications.length}</span></h3></div></div>
       {applications.length === 0 ? <section className="surface-card empty-large"><div className="empty-illustration">▣</div><h3>No applications tracked</h3><p>Add a scholarship, certificate or other application to keep its progress in one place.</p></section> : (
         <div className="application-list">{applications.map((application) => (
           <article className="surface-card application-row" key={application.id}>
@@ -1260,7 +1293,7 @@ function PaperFormPage({ verifiedFacts }: { verifiedFacts: ProfileFact[] }) {
       <section className="surface-card paper-scan-intro">
         <div className="paper-scan-symbol">▧</div>
         <div>
-          <p className="eyebrow">PAPER FORM ASSISTANT</p>
+          <p className="eyebrow">Paper form assistant</p>
           <h3>Photograph a paper form. Get a filled copy.</h3>
           <p>Use your phone camera or select a photo from your gallery. FormSaathi reads the printed labels, matches them to your approved profile and places the values into clear writing spaces.</p>
           <div className="paper-profile-count">{verifiedFacts.length} reviewed profile value(s) available</div>
@@ -1268,7 +1301,7 @@ function PaperFormPage({ verifiedFacts }: { verifiedFacts: ProfileFact[] }) {
       </section>
 
       <section className="surface-card paper-upload-card">
-        <div className="section-head"><div><p className="eyebrow">1 · ADD YOUR FORM</p><h3>Take a photo or choose an image</h3></div><span className="soft-badge">JPG · PNG · WebP</span></div>
+        <div className="section-head"><div><p className="eyebrow">Add your form</p><h3>Take a photo or choose an image</h3></div><span className="soft-badge">JPG · PNG · WebP</span></div>
         <div className="paper-action-row">
           <label className="button primary paper-choice">
             <span>▣ Open camera</span>
@@ -1299,7 +1332,7 @@ function PaperFormPage({ verifiedFacts }: { verifiedFacts: ProfileFact[] }) {
 
       {filledUrl && (
         <section className="surface-card paper-result-card">
-          <div className="section-head"><div><p className="eyebrow">2 · REVIEW THE RESULT</p><h3>Your filled image</h3></div><span className="soft-badge">{placements.length} field(s) placed</span></div>
+          <div className="section-head"><div><p className="eyebrow">Review the result</p><h3>Your filled image</h3></div><span className="soft-badge">{placements.length} field(s) placed</span></div>
           <img className="paper-result-image" src={filledUrl} alt="Filled paper form preview" />
           <div className="paper-result-actions">
             <a className="button primary" href={filledUrl} download={(file?.name || "form").replace(/\.[^.]+$/, "") + "-filled.jpg"}>Download filled image ↓</a>
@@ -1331,7 +1364,7 @@ function PrivacyPage({ userEmail, documentCount, factCount, onClear, busy }: {
 }) {
   return (
     <div className="page-content">
-      <section className="privacy-hero"><div className="privacy-symbol">⌑</div><div><p className="eyebrow light">YOUR DATA. YOUR CALL.</p><h2>Privacy should be part of the product.</h2><p>FormSaathi is designed to process only what you choose and keep you in control of every suggested value.</p></div></section>
+      <section className="privacy-hero"><div className="privacy-symbol">⌑</div><div><p className="eyebrow light">Your data, your call</p><h2>Privacy should be part of the product.</h2><p>FormSaathi is designed to process only what you choose and keep you in control of every suggested value.</p></div></section>
       <div className="privacy-grid">
         <section className="surface-card privacy-card"><div className="privacy-card-icon">▣</div><h3>Private document storage</h3><p>Files are stored in a non-public Supabase Storage bucket. Row-level security policies restrict access to the authenticated owner.</p><span className="privacy-status">Configured in database migration</span></section>
         <section className="surface-card privacy-card"><div className="privacy-card-icon">⌁</div><h3>On-demand OCR</h3><p>Uploading a document does not automatically run OCR. When you choose Run OCR, that file is sent over HTTPS to our hosted OCR processor for in-memory processing. Candidate values need your approval.</p><span className="privacy-status">User initiated</span></section>
@@ -1339,7 +1372,7 @@ function PrivacyPage({ userEmail, documentCount, factCount, onClear, busy }: {
         <section className="surface-card privacy-card"><div className="privacy-card-icon">▧</div><h3>Paper-form photo scan</h3><p>The selected photo is sent to the FormSaathi backend and Google Gemini after your consent. The processing route does not save the photo to your document vault.</p><span className="privacy-status">User initiated · in-memory API processing</span></section>
         <section className="surface-card privacy-card"><div className="privacy-card-icon">↺</div><h3>Delete your data</h3><p>Remove uploaded files, extracted candidates, reviewed profile values and application tracker entries while keeping your login account.</p><span className="privacy-status">{documentCount} documents · {factCount} reviewed fields</span></section>
       </div>
-      <section className="surface-card data-controls"><div><p className="eyebrow">ACCOUNT DATA</p><h3>{userEmail}</h3><p>Clear your FormSaathi content from the active database and private storage. This does not delete your Supabase login account or copies retained in backups according to your provider's retention settings.</p></div><button className="button danger-button" onClick={onClear} disabled={busy}>{busy ? "Clearing…" : "Delete my FormSaathi data"}</button></section>
+      <section className="surface-card data-controls"><div><p className="eyebrow">Account data</p><h3>{userEmail}</h3><p>Clear your FormSaathi content from the active database and private storage. This does not delete your Supabase login account or copies retained in backups according to your provider's retention settings.</p></div><button className="button danger-button" onClick={onClear} disabled={busy}>{busy ? "Clearing…" : "Delete my FormSaathi data"}</button></section>
       <div className="security-callout"><strong>Prototype warning:</strong> this is an MVP foundation, not an independently audited production vault. Use synthetic documents in demos until the hosted project, access policies, backup retention and security controls have been reviewed.</div>
     </div>
   );
@@ -1364,7 +1397,7 @@ function ExtensionPage({ userEmail, verifiedFactCount }: { userEmail: string; ve
       <section className="surface-card extension-hero">
         <div className="extension-mark">FS</div>
         <div className="extension-hero-copy">
-          <p className="eyebrow">FORMsaathi FOR CHROME</p>
+          <p className="eyebrow">FormSaathi for Chrome</p>
           <h2>Take your reviewed profile to the form.</h2>
           <p>FormSaathi can read the fields on the active page, match them against your approved information profile and let you review each suggested value before filling.</p>
           <a className="button primary extension-download" href={extensionPackageUrl}>Download Chrome extension <span>↓</span></a>
@@ -1373,7 +1406,7 @@ function ExtensionPage({ userEmail, verifiedFactCount }: { userEmail: string; ve
       </section>
 
       <section className="surface-card extension-steps-card">
-        <div className="section-head"><div><p className="eyebrow">ONE-TIME SETUP</p><h3>Install the development build</h3></div><span className="soft-badge">Chrome / Chromium</span></div>
+        <div className="section-head"><div><p className="eyebrow">One-time setup</p><h3>Install the development build</h3></div><span className="soft-badge">Chrome / Chromium</span></div>
         <ol className="extension-steps">
           <li><strong>Download and extract</strong><span>Download the ZIP above and extract it to a folder on your computer.</span></li>
           <li><strong>Open Chrome extensions</strong><span>Enter <code>chrome://extensions</code> in the browser address bar.</span></li>
@@ -1384,7 +1417,7 @@ function ExtensionPage({ userEmail, verifiedFactCount }: { userEmail: string; ve
       </section>
 
       <section className="surface-card extension-connect-card">
-        <p className="eyebrow">YOUR FORMsaathi ACCOUNT</p>
+        <p className="eyebrow">Your FormSaathi account</p>
         <h3>Connect using the same account</h3>
         <p>Sign in inside the extension with the same email address and password you use on this website. The extension keeps its own protected browser-extension session; it does not copy credentials from the website.</p>
         <div className="extension-account-summary"><div><span>Website account</span><strong>{userEmail}</strong></div><div><span>Reviewed profile fields</span><strong>{verifiedFactCount}</strong></div></div>

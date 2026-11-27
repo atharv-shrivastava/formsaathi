@@ -1,4 +1,4 @@
-const personNameKeys = new Set(["applicant_name", "father_name"]);
+const personNameKeys = new Set(["applicant_name", "father_name", "mother_name", "guardian_name"]);
 const salutationPrefix = /^(?:(?:mr|mrs|ms|miss|dr|prof(?:essor)?|shri|sri|smt|shrimat[iy]|kumari|master)\.?\s+)+/i;
 
 function cleanCandidateValue(key, rawValue) {
@@ -17,7 +17,17 @@ const patterns = [
   {
     key: "father_name",
     confidence: 0.62,
-    expression: /^(?:father(?:'s)?|father s|guardian|parent)\s*name\s*[:\-]\s*(.{2,90})$/i
+    expression: /^(?:father(?:'s)?|father s)\s*name\s*[:\-]\s*(.{2,90})$/i
+  },
+  {
+    key: "mother_name",
+    confidence: 0.62,
+    expression: /^(?:mother(?:'s)?|mother s)\s*name\s*[:\-]\s*(.{2,90})$/i
+  },
+  {
+    key: "guardian_name",
+    confidence: 0.58,
+    expression: /^(?:guardian|parent(?:'s)?|parent s)\s*name\s*[:\-]\s*(.{2,90})$/i
   },
   {
     key: "date_of_birth",

@@ -14,6 +14,15 @@ function normalizeForMatch(value) {
     .trim();
 }
 
+function containsExactValue(text, value) {
+  const textTokens = normalizeForMatch(text).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const valueTokens = normalizeForMatch(value).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  if (valueTokens.length === 0 || valueTokens.length > textTokens.length) return false;
+  for (let index = 0; index <= textTokens.length - valueTokens.length; index += 1) {
+    if (valueTokens.every((token, offset) => token === textTokens[index + offset])) return true;
+  }
+  return false;
+}
 function slugify(value) {
   const slug = String(value ?? "")
     .normalize("NFKD")
@@ -26,16 +35,30 @@ function slugify(value) {
 }
 
 function evidenceFromText(text, requestedEvidence, value) {
+  const normalizedValue = normalizeForMatch(value);
+  if (!normalizedValue) return "";
+
+  const sourceText = String(text || "");
   const rawEvidence = compact(requestedEvidence, 500);
-  if (rawEvidence && normalizeForMatch(text).includes(normalizeForMatch(rawEvidence))) {
+  const normalizedEvidence = normalizeForMatch(rawEvidence);
+  const normalizedSource = normalizeForMatch(sourceText);
+
+  // A quoted excerpt is useful only when it is genuinely present in OCR output
+  // AND contains the exact candidate value being proposed by the model.
+  if (
+    rawEvidence &&
+    normalizedEvidence &&
+    normalizedSource.includes(normalizedEvidence) &&
+    containsExactValue(normalizedEvidence, normalizedValue)
+  ) {
     return rawEvidence;
   }
 
-  const normalizedValue = normalizeForMatch(value);
-  if (!normalizedValue) return "";
-  const matchingLine = String(text || "").split(/\r?\n/)
+  // Fall back to an OCR line that contains the value. Never trust an unrelated
+  // valid excerpt merely because it appears somewhere else in the document.
+  const matchingLine = sourceText.split(/\r?\n/)
     .map((line) => compact(line, 500))
-    .find((line) => normalizeForMatch(line).includes(normalizedValue));
+    .find((line) => containsExactValue(line, normalizedValue));
   return matchingLine || "";
 }
 

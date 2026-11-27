@@ -244,7 +244,7 @@ export function sanitizeDetectedFields(rawFields) {
     const inputType = String(raw.inputType || tagName).toLowerCase().slice(0, 40);
     if (!id || !/^[a-zA-Z0-9_-]+$/.test(id) || seen.has(id)) continue;
     if (!["input", "textarea", "select"].includes(tagName)) continue;
-    if (tagName === "input" && ["checkbox", "radio"].includes(inputType)) continue;
+    if (blockedInputTypes.has(inputType)) continue;
     if (isFeedbackTextarea(raw)) continue;
     seen.add(id);
 
