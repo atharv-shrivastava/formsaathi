@@ -432,3 +432,13 @@ code { color: var(--action); background: #eef2ec; }
   .checklist-item:hover { transform: none; padding-left: initial; }
   .paper-scene { display: none !important; }
 }
+
+.review-bulk-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.candidate-general-save { color: #365742; background: #f2f6f0; border: 1px solid #dbe6d9; }
+.candidate-general-save:hover:not(:disabled) { color: #254a34; background: #e8f0e6; border-color: #cbdcc8; }
+.candidate-actions .button { min-height: 35px; padding: 0 10px; font-size: 11px; }
+.dashboard-paper-scene { min-width: 0; }
+@media (max-width: 680px) {
+  .review-bulk-actions { width: 100%; justify-content: stretch; }
+  .review-bulk-actions .button { flex: 1 1 180px; }
+}
