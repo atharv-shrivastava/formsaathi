@@ -147,21 +147,22 @@ export async function disconnectExtensionAccount(): Promise<void> {
   }
 }
 
-export async function getVerifiedProfileFacts(keys: string[]): Promise<VerifiedProfileFact[]> {
-  const uniqueKeys = Array.from(new Set(keys)).filter((key) => /^[a-z0-9_]+$/.test(key));
-  if (uniqueKeys.length === 0) return [];
-
+export async function getVerifiedProfileFacts(): Promise<VerifiedProfileFact[]> {
   const session = await getExtensionSession();
   if (!session) throw new Error("Connect your FormSaathi account to retrieve reviewed profile values.");
 
+  // Fetch the account's complete verified fact vocabulary. Filtering by the
+  // portal's guessed canonical key here caused false misses when a document
+  // stored "full_name" but a portal asked for "applicantName", for example.
+  // RLS still scopes this request to the signed-in user.
   const url = new URL(`${SUPABASE_URL}/rest/v1/profile_facts`);
   url.searchParams.set(
     "select",
     "id,fact_key,fact_label,fact_value,source_document_id,confidence,updated_at"
   );
   url.searchParams.set("verified", "eq.true");
-  url.searchParams.set("fact_key", `in.(${uniqueKeys.join(",")})`);
   url.searchParams.set("order", "fact_key.asc");
+  url.searchParams.set("limit", "500");
 
   const response = await fetch(url, {
     headers: {
@@ -171,4 +172,34 @@ export async function getVerifiedProfileFacts(keys: string[]): Promise<VerifiedP
   });
   if (!response.ok) throw await responseError(response);
   return await response.json() as VerifiedProfileFact[];
+}
+
+export interface ApprovedDocumentFact {
+  id: string;
+  document_id: string;
+  fact_key: string;
+  fact_label: string | null;
+  fact_value: string;
+  confidence: number | null;
+  evidence: string | null;
+}
+
+export async function getApprovedDocumentFacts(): Promise<ApprovedDocumentFact[]> {
+  const session = await getExtensionSession();
+  if (!session) throw new Error("Connect your FormSaathi account to retrieve document-specific values.");
+
+  const url = new URL(`${SUPABASE_URL}/rest/v1/extracted_facts`);
+  url.searchParams.set("select", "id,document_id,fact_key,fact_label,fact_value,confidence,evidence");
+  url.searchParams.set("review_status", "eq.approved");
+  url.searchParams.set("order", "created_at.desc");
+  url.searchParams.set("limit", "500");
+
+  const response = await fetch(url, {
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${session.access_token}`
+    }
+  });
+  if (!response.ok) throw await responseError(response);
+  return await response.json() as ApprovedDocumentFact[];
 }

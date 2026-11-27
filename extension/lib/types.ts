@@ -36,8 +36,10 @@ export interface PortalField {
   required: boolean;
   placeholder?: string;
   name?: string;
+  autoComplete?: string;
   options?: string[];
   isFile: boolean;
+  frameId?: number;
 }
 
 export interface ScanResult {
