@@ -13,6 +13,8 @@ export interface CandidateFact {
   value: string;
   confidence: number;
   evidence: string;
+  scope?: "general" | "document";
+  sourceDocumentId?: string | null;
 }
 
 export interface StoredDocument {
@@ -37,6 +39,14 @@ export interface PortalField {
   placeholder?: string;
   name?: string;
   options?: string[];
+  optionValues?: Array<{ label: string; value: string }>;
+  autocomplete?: string;
+  role?: string;
+  nearbyText?: string;
+  dataLabel?: string;
+  isContentEditable?: boolean;
+  frameId?: number;
+  domId?: string;
   isFile: boolean;
 }
 
