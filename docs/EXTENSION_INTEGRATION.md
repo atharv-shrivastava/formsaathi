@@ -6,6 +6,23 @@ The web app and Chrome extension use the same Supabase project and user account.
 
 The extension refreshes expired sessions and clears its local session when the user disconnects. The Supabase publishable key is client configuration. Never put a service-role key or Gemini API key in the extension.
 
+## Web document extraction and profile review
+
+The web app processes supported uploads (PDF, JPG, PNG and WebP; maximum 10 MB) after the user confirms the processing notice. Selecting a vault category is for organisation only; it does not constrain field extraction.
+
+1. The original upload is stored in the user's private Supabase Storage folder.
+2. The authenticated web app sends the selected file to `POST /api/ocr` on the Node API.
+3. The API extracts text using PDF text extraction or image OCR (RapidOCR, with Tesseract fallback for recoverable RapidOCR failures).
+4. When `GEMINI_API_KEY` is configured, the Node API sends the OCR text to Gemini for broad labelled field/value extraction and document-type identification. The prompt treats document contents as untrusted data and instructs the model not to invent or rewrite values.
+5. The backend validates proposed field values against evidence present in the OCR text, merges conservative rule-based candidates, and returns the candidates plus document type.
+6. The web app stores every validated candidate in `public.extracted_facts` with its `document_id`, original `fact_label`, `fact_key`, value, confidence, evidence and pending review status.
+7. The Information Profile page groups candidates by their source document. Users can edit, dismiss, select individual fields or bulk-select fields from one or more documents. Only selected fields are upserted into `public.profile_facts` with `verified = true`.
+8. Previously approved or dismissed candidates remain attached to the document when OCR is rerun; only pending candidates are refreshed.
+
+The extension does not read or OCR all web-vault documents on every webpage scan. It searches only the user's `verified = true` profile facts. Stored original field labels are used alongside fact keys to help match less-common fields (for example, a document's "Consumer Number" to a portal's "Consumer No."). The authenticated backend filters those saved facts to the detected webpage fields before Gemini proposes mappings.
+
+If Gemini is not configured or its request fails, the API falls back to a limited set of labelled-line patterns. In that fallback mode it cannot promise broad extraction of every field and the response explicitly reports the limitation. OCR/Gemini results are candidates, not proof that a value is correct.
+
 ## Form scan request
 
 When the user selects **Scan current page**, the content script collects visible control metadata only:
