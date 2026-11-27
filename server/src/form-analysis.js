@@ -6,6 +6,8 @@ const MAX_CANDIDATES_PER_FIELD = 6;
 // Regex signals are deliberately broad retrieval hints, not permission to autofill.
 // The model proposes a mapping; the validator still checks the exact retrieved fact.
 const semanticPatterns = [
+  ["first_name", /\b(first ?name|given ?name)\b|\b(forename|fname)\b/],
+  ["last_name", /\b(last ?name|family ?name)\b|\b(surname|lname)\b/],
   ["father_name", /\b(father|fathers|dad|paternal)\b.*\bname\b|\bname\b.*\b(father|fathers|dad)\b/],
   ["mother_name", /\b(mother|mothers|mom|maternal)\b.*\bname\b|\bname\b.*\b(mother|mothers|mom)\b/],
   ["guardian_name", /\b(guardian|parent)\b.*\bname\b|\bname\b.*\b(guardian|parent)\b/],
@@ -81,16 +83,50 @@ function semanticKind(value) {
 }
 
 function isNameKind(kind) {
-  return ["father_name", "mother_name", "guardian_name", "applicant_name", "generic_name"].includes(kind);
+  return ["first_name", "last_name", "father_name", "mother_name", "guardian_name", "applicant_name", "generic_name"].includes(kind);
 }
 
 function semanticCompatibility(fieldKind, factKind) {
   if (!fieldKind || !factKind) return true;
   if (fieldKind === factKind) return true;
+
+  // A first/last-name field may use only an explicitly labelled applicant full name.
+  if (fieldKind === "first_name" || fieldKind === "last_name") {
+    return factKind === "applicant_name" || factKind === "generic_name";
+  }
   if (fieldKind === "generic_name") return factKind === "applicant_name" || factKind === "generic_name";
   if (factKind === "generic_name") return fieldKind === "applicant_name";
   if (isNameKind(fieldKind) || isNameKind(factKind)) return false;
   return fieldKind === factKind;
+}
+
+const applicantFullNameKeys = new Set([
+  "applicant_name", "full_name", "student_name", "candidate_name", "name_of_applicant"
+]);
+
+function splitApplicantName(value) {
+  const parts = String(value || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return null;
+  return { firstName: parts[0], lastName: parts[parts.length - 1] };
+}
+
+function isApplicantFullNameFact(fact) {
+  const key = String(fact.fact_key || "").toLowerCase().replace(/[ -]/g, "_");
+  return applicantFullNameKeys.has(key);
+}
+
+function valueForField(fieldKind, fact) {
+  if (fieldKind !== "first_name" && fieldKind !== "last_name") return fact.fact_value;
+  if (!isApplicantFullNameFact(fact)) return fact.fact_value;
+  const parts = splitApplicantName(fact.fact_value);
+  if (!parts) return "";
+  return fieldKind === "first_name" ? parts.firstName : parts.lastName;
+}
+
+function isFeedbackTextarea(field) {
+  if (String(field.tagName || "").toLowerCase() !== "textarea") return false;
+  const context = [field.label, field.name, field.placeholder].filter(Boolean).join(" ");
+  return /\b(feedback|comments?|suggestions?|reviews?|complaints?|remarks?|testimonials?|bug reports?|report a problem|how can we improve|tell us what you think|share your thoughts)\b/i.test(context);
 }
 
 function meaningfulTokens(value) {
@@ -117,6 +153,11 @@ function scoreFieldFact(field, fact) {
              (factKind === "generic_name" && fieldKind === "applicant_name")) {
     score = 0.66;
     reasons.push("generic-applicant-name");
+  } else if ((fieldKind === "first_name" || fieldKind === "last_name") &&
+             (factKind === "applicant_name" || factKind === "generic_name") &&
+             isApplicantFullNameFact(fact)) {
+    score = 0.84;
+    reasons.push("applicant-full-name-component");
   }
 
   if (fieldText === factText) {
@@ -166,13 +207,14 @@ export function retrieveProfileFactsForFields(fields, facts) {
           factId: String(fact.id),
           factKey: fact.fact_key,
           factLabel: fact.fact_label || null,
-          factValue: fact.fact_value,
+          factValue: valueForField(semanticKind(fieldSearchText(field)), fact),
           retrievalScore: Number(retrieval.score.toFixed(3)),
           retrievalReasons: retrieval.reasons,
           sourceDocumentId: fact.source_document_id || null,
           updatedAt: fact.updated_at || null
         } : null;
       })
+      .filter((candidate) => candidate && String(candidate.factValue || "").trim())
       .filter(Boolean)
       .sort((a, b) => b.retrievalScore - a.retrievalScore ||
         String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))
@@ -202,6 +244,8 @@ export function sanitizeDetectedFields(rawFields) {
     const inputType = String(raw.inputType || tagName).toLowerCase().slice(0, 40);
     if (!id || !/^[a-zA-Z0-9_-]+$/.test(id) || seen.has(id)) continue;
     if (!["input", "textarea", "select"].includes(tagName)) continue;
+    if (tagName === "input" && ["checkbox", "radio"].includes(inputType)) continue;
+    if (isFeedbackTextarea(raw)) continue;
     seen.add(id);
 
     const options = Array.isArray(raw.options)

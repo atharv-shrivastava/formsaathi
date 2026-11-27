@@ -1,6 +1,8 @@
 import type { CandidateFact, DocumentCategory, PortalField, ReviewRow, StoredDocument } from "./types";
 
 const aliases: Record<string, string[]> = {
+  first_name: ["first name", "firstname", "given name", "forename", "fname"],
+  last_name: ["last name", "lastname", "surname", "family name", "lname"],
   applicant_name: ["applicant name", "applicants name", "name of applicant", "candidate name", "student name", "full name", "name"],
   father_name: ["father name", "fathers name", "name of father", "guardian name", "name of guardian", "parent name"],
   date_of_birth: ["date of birth", "dob", "birth date"],
@@ -15,8 +17,10 @@ const orderedAliases = Object.entries(aliases)
   .sort((a, b) => b.name.length - a.name.length);
 
 export function canonicalFieldKey(field: PortalField): string | null {
-  const haystack = [field.label, field.name, field.placeholder].filter(Boolean).join(" ").toLowerCase();
+  const haystack = [field.label, field.name, field.placeholder].filter(Boolean).join(" ");
   const normalized = haystack
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .toLowerCase()
     .replace(/['’]/g, "")
     .replace(/[^a-z0-9 ]/g, " ")
     .replace(/\s+/g, " ")
@@ -34,7 +38,7 @@ export function canonicalFieldKey(field: PortalField): string | null {
 
 export function categoryForKey(key: string | null): DocumentCategory | null {
   if (!key) return null;
-  if (["applicant_name", "father_name", "date_of_birth"].includes(key)) return "identity";
+  if (["applicant_name", "father_name", "date_of_birth", "first_name", "last_name"].includes(key)) return "identity";
   if (key === "annual_income") return "income";
   if (key === "percentage") return "education";
   if (["bank_account_number", "ifsc_code"].includes(key)) return "bank";
@@ -50,6 +54,18 @@ export function retrieveRelevantDocuments(fields: PortalField[], documents: Stor
   return documents.filter((document) => categories.has(document.category));
 }
 
+function isApplicantFullNameFact(fact: CandidateFact): boolean {
+  return ["applicant_name", "full_name", "student_name", "candidate_name"].includes(
+    fact.key.toLowerCase().replace(/[ -]/g, "_")
+  );
+}
+
+function deriveFullNamePart(key: string, value: string): string {
+  const parts = String(value || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return "";
+  return key === "first_name" ? parts[0] : parts[parts.length - 1];
+}
+
 export function createReviewRows(
   fields: PortalField[],
   facts: Array<CandidateFact & { sourceId: string; sourceName: string }>
@@ -59,7 +75,18 @@ export function createReviewRows(
     if (!key || field.isFile) {
       return { field, canonicalKey: key, value: "", status: "unmapped" };
     }
-    const candidates = facts.filter((fact) => fact.key === key);
+
+    const directCandidates = facts.filter((fact) => fact.key === key);
+    const candidates = directCandidates.length > 0
+      ? directCandidates
+      : (key === "first_name" || key === "last_name")
+        ? facts.filter(isApplicantFullNameFact).map((fact) => ({
+            ...fact,
+            key,
+            value: deriveFullNamePart(key, fact.value),
+            evidence: [fact.evidence, "Derived from the stored full name."].filter(Boolean).join(" · ")
+          })).filter((fact) => Boolean(fact.value))
+        : [];
     if (!candidates.length) return { field, canonicalKey: key, value: "", status: "unmapped" };
 
     const distinctValues = Array.from(new Set(candidates.map((fact) => fact.value.trim())));
