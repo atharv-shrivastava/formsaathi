@@ -869,7 +869,7 @@ function DocumentsPage({
           ))}
         </div>
       )}
-      <p className="inline-note"><span>ⓘ</span> Uploading stores the original file in your private vault. When you click Run OCR, that selected file is sent over HTTPS to FormSaathi's hosted OCR processor; the processor handles it in memory and does not save it to its own disk. Extracted values remain unverified until you approve them.</p>
+      <p className="inline-note"><span>ⓘ</span> Uploading stores the original file in your private vault. When you click Run OCR, FormSaathi asks separately before sending the file to its hosted OCR processor and using Gemini to detect labelled fields. Extracted candidates are linked to this document and are not available to the extension until you select and approve them.</p>
     </div>
   );
 }
