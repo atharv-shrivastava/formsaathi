@@ -38,6 +38,7 @@ export interface PortalField {
   name?: string;
   options?: string[];
   isFile: boolean;
+  frameId?: number;
 }
 
 export interface ScanResult {
