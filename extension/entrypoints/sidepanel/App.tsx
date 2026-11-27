@@ -272,7 +272,7 @@ export default function App() {
 
       if (account) {
         const consent = window.confirm(
-          "For AI form analysis, FormSaathi sends detected field labels, names, placeholders and dropdown choices to its backend. The backend retrieves only approved profile facts that appear relevant and sends those values to Google Gemini for matching. Values already typed into the form and original document files are not sent. Continue with this one-time AI analysis?"
+          "For AI form analysis, FormSaathi sends every detected visible field descriptor from this scan (labels, names, placeholders, types and dropdown choices, up to 120 fields) to its backend. The backend retrieves a few likely approved profile facts per field using regex hints and text similarity, then sends the complete field list and those candidates to Google Gemini to choose matches. Values already typed into the form, cookies and original document files are not sent. Continue with this one-time AI analysis?"
         );
 
         if (consent) {
@@ -364,7 +364,7 @@ export default function App() {
       return;
     }
     if (!window.confirm(
-      "This sends the detected field labels and relevant approved profile values to the FormSaathi backend and Google Gemini. It does not send values already typed into the form or original document files. Continue?"
+      "This sends every detected visible field descriptor in the current scan (up to 120 fields), plus a small set of retrieved approved profile facts per field, to the FormSaathi backend and Google Gemini. Values already typed into the form, cookies and original document files are not sent. Continue?"
     )) return;
 
     setBusy(true);
@@ -421,7 +421,7 @@ export default function App() {
       </section>
 
       <div className="privacy-note">
-        Your approved profile facts sync from FormSaathi. Selected local documents are sent to hosted OCR only after a separate confirmation. AI analysis sends only detected field descriptions and relevant approved facts after your confirmation; typed form values and original files are not sent to Gemini for webpage-form matching.
+        Your approved profile facts sync from FormSaathi. Selected local documents are sent to hosted OCR only after a separate confirmation. AI analysis sends the complete detected field-descriptor list (up to 120 fields) and only the retrieved approved-fact candidates per field after your confirmation; typed form values, cookies and original files are not sent to Gemini for webpage-form matching.
       </div>
 
       <nav className="tabs">
