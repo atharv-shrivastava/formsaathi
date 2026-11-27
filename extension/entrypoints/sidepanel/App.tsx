@@ -22,7 +22,14 @@ const emptyScan: ScanResult = { title: "", url: "", fields: [] };
 
 function mergeAiMappings(
   rows: ReviewRow[],
-  mappings: Array<{ fieldId: string; factId: string; factKey: string; value: string; confidence: number }>
+  mappings: Array<{
+    fieldId: string;
+    factId: string;
+    factKey: string;
+    value: string;
+    confidence: number;
+    sourceDocumentId?: string | null;
+  }>
 ): ReviewRow[] {
   const byField = new Map(mappings.map((mapping) => [mapping.fieldId, mapping]));
   return rows.map((row) => {
@@ -32,10 +39,14 @@ function mergeAiMappings(
       ...row,
       canonicalKey: suggestion.factKey,
       value: suggestion.value,
-      sourceName: "Verified FormSaathi profile",
+      sourceName: suggestion.sourceDocumentId
+        ? "Document-specific · " + suggestion.sourceDocumentId.slice(0, 8)
+        : "General profile",
       sourceId: suggestion.factId,
       confidence: suggestion.confidence,
-      evidence: "AI matched this field to the approved profile fact '" + suggestion.factKey + "'. The original stored value is shown; verify it before filling.",
+      evidence: "AI matched this field to the approved " +
+        (suggestion.sourceDocumentId ? "document-specific" : "general") +
+        " fact '" + suggestion.factKey + "'. Verify the displayed value before filling.",
       status: "needs-review"
     };
   });
