@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import type { Session, User } from "@supabase/supabase-js";
+import PaperScene from "./components/PaperScene";
 import { isSupabaseConfigured, ocrApiUrl, supabase } from "./lib/supabase";
 import type {
   DocumentCategory,
@@ -178,6 +179,7 @@ function AuthScreen() {
     <main className="auth-screen">
       <section className="auth-story">
         <div className="brand-lockup"><div className="brand-mark">F</div><span>FormSaathi</span></div>
+        <PaperScene className="auth-paper-scene" label="A floating three-dimensional stack of organised forms" />
         <div className="story-copy">
           <p className="eyebrow light">Less paperwork, more clarity</p>
           <h1>Government forms shouldn't feel like a maze.</h1>
@@ -855,6 +857,7 @@ function OverviewPage({ name, documents, verifiedFacts, pendingFacts, applicatio
           <h2>Good to see you, {name}.</h2>
           <p>Keep the documents and approved details you need for applications in one place.</p>
         </div>
+        <PaperScene className="dashboard-paper-scene" label="A floating three-dimensional stack of organised documents with a verified check mark" />
         <aside className="next-step-card" aria-label="Suggested next step">
           <div>
             <p className="eyebrow">Suggested next step</p>
