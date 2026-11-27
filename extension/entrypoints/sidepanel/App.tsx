@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { disconnectExtensionAccount, getExtensionAccount, getExtensionSession, getVerifiedProfileFacts, signInExtensionAccount, type ExtensionAccount } from "../../lib/account";
+import { disconnectExtensionAccount, getApprovedDocumentFacts, getExtensionAccount, getExtensionSession, getVerifiedProfileFacts, signInExtensionAccount, type ExtensionAccount } from "../../lib/account";
 import { checkApi, extractDocument, prepareImage as requestImagePreparation, requestFormAnalysis } from "../../lib/api";
 import { deleteDocument, listDocuments, saveDocument } from "../../lib/db";
 import { canonicalFieldKey, categoryForKey, createReviewRows, inferDocumentCategory, retrieveRelevantDocuments } from "../../lib/mapping";
@@ -227,6 +227,17 @@ export default function App() {
             evidence: "Reviewed and approved in your FormSaathi information profile.",
             sourceId: fact.id,
             sourceName: "FormSaathi verified profile"
+          });
+        }
+        const documentFacts = await getApprovedDocumentFacts();
+        for (const fact of documentFacts) {
+          facts.push({
+            key: fact.fact_key,
+            value: fact.fact_value,
+            confidence: fact.confidence ?? 0.9,
+            evidence: fact.evidence || "Approved value extracted from a specific uploaded document.",
+            sourceId: fact.id,
+            sourceName: "Document-specific record"
           });
         }
       }
