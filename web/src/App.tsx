@@ -520,7 +520,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
       return;
     }
 
-    const replacements = Array.from(uniqueByKey.values()).filter((fact) => {
+    const replacements = Array.from(uniqueBySourceAndKey.values()).filter((fact) => {
       const current = profileFacts.find((item) =>
         item.fact_key === fact.fact_key && item.source_document_id === fact.document_id
       );
@@ -1012,8 +1012,14 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
     { key: "bank_account_number", label: "Bank account number", type: "text" },
     { key: "ifsc_code", label: "IFSC code", type: "text" }
   ] as const;
+  const generalFacts = verifiedFacts.filter((fact) => fact.source_document_id === null);
+  const documentFacts = verifiedFacts.filter((fact) => fact.source_document_id !== null);
+  const documentFactGroups = documentFacts.reduce<Record<string, ProfileFact[]>>((groups, fact) => {
+    if (fact.source_document_id) (groups[fact.source_document_id] ||= []).push(fact);
+    return groups;
+  }, {});
   function valueFor(key: string) {
-    return manualValues[key] ?? verifiedFacts.find((fact) => fact.fact_key === key)?.fact_value ?? "";
+    return manualValues[key] ?? generalFacts.find((fact) => fact.fact_key === key)?.fact_value ?? "";
   }
   async function saveManual(key: string) {
     setManualError("");
@@ -1040,7 +1046,7 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
                   autoComplete="off"
                 />
                 <button className="mini-button" type="button" disabled={busy || !valueFor(field.key).trim()} onClick={() => void saveManual(field.key)}>
-                  {verifiedFacts.some((fact) => fact.fact_key === field.key) ? "Update" : "Save"}
+                  {generalFacts.some((fact) => fact.fact_key === field.key) ? "Update" : "Save"}
                 </button>
               </div>
             </label>
@@ -1051,10 +1057,30 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
       </section>
       <div className="profile-intro"><div><div className="profile-shield">◈</div><div><strong>Your information profile</strong><p>Only values you approve are marked as reviewed and made available for future form matching.</p></div></div><span className="reviewed-count">{verifiedFacts.length} reviewed</span></div>
       <section className="surface-card profile-section">
-        <div className="section-head"><div><p className="eyebrow">Saved information</p><h3>Reviewed profile</h3></div><span className="soft-badge">{verifiedFacts.length} fields</span></div>
-        {verifiedFacts.length === 0 ? <EmptyState title="Nothing verified yet" text="Enter information manually above or run OCR on a document and approve the values you want to save here." /> : (
-          <div className="fact-grid">{verifiedFacts.map((fact) => (
-            <div className="fact-card" key={fact.id}><div className="fact-label">{fact.fact_label || displayFactKey(fact.fact_key)} <span className="verified-dot">✓ Reviewed</span></div><strong>{fact.fact_value}</strong><small>Source: {fact.source_document_id ? docName(fact.source_document_id) : "Manually added"}</small></div>
+        <div className="section-head"><div><p className="eyebrow">Reusable details</p><h3>General information</h3><p className="muted">Information you entered or chose to keep as your default details across applications.</p></div><span className="soft-badge">{generalFacts.length} fields</span></div>
+        {generalFacts.length === 0 ? <EmptyState title="No general information saved" text="Enter details in the manual profile above. These values are the default choices when a portal asks for them." /> : (
+          <div className="fact-grid">{generalFacts.map((fact) => (
+            <div className="fact-card" key={fact.id}><div className="fact-label">{fact.fact_label || displayFactKey(fact.fact_key)} <span className="verified-dot">✓ General</span></div><strong>{fact.fact_value}</strong><small>Source: Manually entered or saved as general information</small></div>
+          ))}</div>
+        )}
+      </section>
+      <section className="surface-card profile-section document-profile-section">
+        <div className="section-head"><div><p className="eyebrow">Source-linked details</p><h3>Document-specific information</h3><p className="muted">Approved values stay attached to the document they came from. They do not overwrite your general information.</p></div><span className="soft-badge">{documentFacts.length} fields</span></div>
+        {documentFacts.length === 0 ? <EmptyState title="No document-specific values yet" text="Run OCR on a document, review its detected fields and save approved values to keep them with that document." /> : (
+          <div className="candidate-document-groups saved-document-groups">{Object.entries(documentFactGroups).map(([documentId, group]) => (
+            <section className="candidate-document-group" key={documentId}>
+              <div className="candidate-document-heading">
+                <div><strong>{docName(documentId)}</strong><small>{group.length} saved field(s) · source-specific</small></div>
+                <span className="soft-badge">Document record</span>
+              </div>
+              <div className="fact-grid">{group.map((fact) => (
+                <div className="fact-card" key={fact.id}>
+                  <div className="fact-label">{fact.fact_label || displayFactKey(fact.fact_key)} <span className="verified-dot">✓ Reviewed</span></div>
+                  <strong>{fact.fact_value}</strong>
+                  <small>Source: {docName(documentId)}</small>
+                </div>
+              ))}</div>
+            </section>
           ))}</div>
         )}
       </section>
