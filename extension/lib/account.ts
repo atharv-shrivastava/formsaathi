@@ -170,6 +170,7 @@ export async function getVerifiedProfileFacts(keys?: string[]): Promise<Verified
         : "id,fact_key,fact_label,fact_value,document_id,confidence,updated_at"
     );
     url.searchParams.set("verified", "eq.true");
+    if (table === "profile_facts") url.searchParams.set("source_document_id", "is.null");
     url.searchParams.set("order", "updated_at.desc");
     url.searchParams.set("limit", "240");
     if (uniqueKeys.length > 0) {
