@@ -6,7 +6,7 @@ export default defineConfig({
     name: "FormSaathi",
     description: "Document-aware, human-reviewed government form guidance.",
     version: "0.1.0",
-    permissions: ["storage", "activeTab", "sidePanel"],
+    permissions: ["storage", "activeTab", "sidePanel", "webNavigation"],
     host_permissions: [
       "https://jsurlqzbpmianyvmteto.supabase.co/*",
       "https://formsaathi-web.vercel.app/*",
