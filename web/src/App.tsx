@@ -321,8 +321,21 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         await client.storage.from("formsaathi-documents").remove([storagePath]);
         throw insertError;
       }
-      setMessage(file.name + " uploaded to your private document vault.");
+      const uploadedDocument: UserDocument = {
+        id,
+        user_id: user.id,
+        filename: file.name,
+        category: uploadCategory,
+        document_type: null,
+        mime_type: file.type,
+        size_bytes: file.size,
+        storage_path: storagePath,
+        status: "uploaded",
+        created_at: new Date().toISOString()
+      };
+      setMessage(file.name + " uploaded. FormSaathi will now ask permission to extract its labelled fields.");
       await refreshData();
+      await runOcr(uploadedDocument);
     } catch (reason) {
       setError(messageFor(reason));
     } finally {
@@ -851,11 +864,11 @@ function DocumentsPage({
   return (
     <div className="page-content">
       <section className="surface-card upload-card">
-        <div className="upload-main"><div className="upload-copy"><div className="upload-symbol">＋</div><div><h3>Add a document</h3><p>PDF, JPG, PNG or WebP · Up to 10 MB per file</p></div></div><label className="cloud-consent"><input type="checkbox" checked={cloudConsent} onChange={(event) => onCloudConsentChange(event.target.checked)} /><span>I understand this uploads a copy to my private FormSaathi cloud vault. I will use synthetic documents for this MVP demo.</span></label></div>
-        <div className="upload-controls"><label className="category-picker"><span>Document type</span><select value={category} onChange={(event) => onCategoryChange(event.target.value as DocumentCategory)}>{categoryOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label className={!cloudConsent || busy ? "button primary disabled" : "button primary"}>Choose file<input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" onChange={onUpload} disabled={!cloudConsent || busy} hidden /></label></div>
+        <div className="upload-main"><div className="upload-copy"><div className="upload-symbol">＋</div><div><h3>Add a document</h3><p>PDF, JPG, PNG or WebP · Up to 10 MB. Any document category can be processed.</p></div></div><label className="cloud-consent"><input type="checkbox" checked={cloudConsent} onChange={(event) => onCloudConsentChange(event.target.checked)} /><span>I understand this uploads a copy to my private FormSaathi cloud vault. I will use synthetic documents for this MVP demo.</span></label></div>
+        <div className="upload-controls"><label className="category-picker"><span>Vault category (for organisation only)</span><select value={category} onChange={(event) => onCategoryChange(event.target.value as DocumentCategory)}>{categoryOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label className={!cloudConsent || busy ? "button primary disabled" : "button primary"}>Choose file<input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" onChange={onUpload} disabled={!cloudConsent || busy} hidden /></label></div>
       </section>
       <div className="section-head document-list-head"><div><p className="eyebrow">YOUR PRIVATE STORAGE</p><h3>Uploaded documents <span className="inline-count">{documents.length}</span></h3></div><span className="vault-label">⌑ Private vault</span></div>
-      {documents.length === 0 ? <section className="surface-card empty-large"><div className="empty-illustration">▤</div><h3>No documents yet</h3><p>Upload a document and choose the closest category. You can change it later.</p></section> : (
+      {documents.length === 0 ? <section className="surface-card empty-large"><div className="empty-illustration">▤</div><h3>No documents yet</h3><p>Upload any supported document. FormSaathi detects its type and extracts labelled fields regardless of the selected vault category.</p></section> : (
         <div className="document-table surface-card">
           <div className="table-heading"><span>DOCUMENT</span><span>CATEGORY</span><span>ADDED</span><span>STATUS</span><span>ACTIONS</span></div>
           {documents.map((document) => (
@@ -890,6 +903,10 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
   const [manualValues, setManualValues] = useState<Record<string, string>>({});
   const [manualError, setManualError] = useState("");
   const [selectedFactIds, setSelectedFactIds] = useState<string[]>([]);
+  useEffect(() => {
+    const currentPendingIds = new Set(pendingFacts.map((fact) => fact.id));
+    setSelectedFactIds((current) => current.filter((id) => currentPendingIds.has(id)));
+  }, [pendingFacts]);
   const docFor = (id: string) => documents.find((document) => document.id === id);
   const docName = (id: string) => docFor(id)?.filename || "Source document";
   const pendingGroups = pendingFacts.reduce<Record<string, ExtractedFact[]>>((groups, fact) => {
