@@ -359,6 +359,10 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
   }
 
   async function runOcr(document: UserDocument) {
+    const consent = window.confirm(
+      "FormSaathi will send this document to its hosted OCR processor. Its extracted text may then be sent to Google Gemini for broad field detection, including personal or sensitive information. The detected values will remain pending until you choose which ones to save. Continue?"
+    );
+    if (!consent) return;
     clearNotice();
     setBusyDocument(document.id);
     try {
@@ -376,7 +380,10 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         body: form
       });
       const payload = await response.json().catch(() => ({})) as {
-        facts?: Array<{ key: string; value: string; confidence?: number; evidence?: string }>;
+        facts?: Array<{ key: string; label?: string; value: string; confidence?: number; evidence?: string }>;
+        documentType?: string | null;
+        aiExtractionUsed?: boolean;
+        note?: string;
         error?: string;
       };
       if (!response.ok) throw new Error(payload.error || ("OCR service returned HTTP " + response.status + ". Check the backend route and Render logs."));
@@ -384,10 +391,11 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
       const { error: clearError } = await client.from("extracted_facts").delete().eq("document_id", document.id);
       if (clearError) throw clearError;
       if (extracted.length) {
-        const rows = extracted.map((fact: { key: string; value: string; confidence?: number; evidence?: string }) => ({
+        const rows = extracted.map((fact: { key: string; label?: string; value: string; confidence?: number; evidence?: string }) => ({
           user_id: user.id,
           document_id: document.id,
           fact_key: fact.key,
+          fact_label: fact.label || fact.key.replace(/_/g, " "),
           fact_value: fact.value,
           confidence: Number.isFinite(fact.confidence) ? fact.confidence : null,
           evidence: fact.evidence || null,
@@ -396,11 +404,16 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         const { error: insertError } = await client.from("extracted_facts").insert(rows);
         if (insertError) throw insertError;
       }
-      const { error: statusError } = await client.from("documents").update({ status: "extracted" }).eq("id", document.id);
+      const { error: statusError } = await client.from("documents").update({
+        status: "extracted",
+        document_type: payload.documentType || document.document_type || null
+      }).eq("id", document.id);
       if (statusError) throw statusError;
       setMessage(extracted.length
-        ? "OCR found " + extracted.length + " candidate value(s). Review them before adding anything to your profile."
-        : "OCR completed, but no recognised fields matched the current extraction rules. The original document is unchanged.");
+        ? (payload.aiExtractionUsed ? "AI detected " : "OCR detected ") + extracted.length + " field(s)" +
+          (payload.documentType ? " in this " + payload.documentType : " in this document") +
+          ". Select the values you want to save to your profile."
+        : (payload.note || "OCR completed, but no fields were confidently detected. Review the original document or enter the information manually."));
       await refreshData();
     } catch (reason) {
       const detail = messageFor(reason);
@@ -428,6 +441,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
       const { error: saveError } = await client.from("profile_facts").upsert({
         user_id: user.id,
         fact_key: fact.fact_key,
+        fact_label: fact.fact_label || displayFactKey(fact.fact_key),
         fact_value: fact.fact_value,
         source_document_id: fact.document_id,
         confidence: fact.confidence,
@@ -440,6 +454,73 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
       await refreshData();
     } catch (reason) {
       setError(messageFor(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approveSelectedFacts(selectedFacts: ExtractedFact[]) {
+    if (selectedFacts.length === 0) return;
+    const uniqueByKey = new Map<string, ExtractedFact>();
+    const conflictingKeys = new Set<string>();
+    for (const fact of selectedFacts) {
+      const existing = uniqueByKey.get(fact.fact_key);
+      if (existing && existing.fact_value !== fact.fact_value) conflictingKeys.add(fact.fact_key);
+      else if (!existing) uniqueByKey.set(fact.fact_key, fact);
+    }
+    if (conflictingKeys.size > 0) {
+      setError(
+        "You selected different values for the same profile field: " +
+        Array.from(conflictingKeys).map(displayFactKey).join(", ") +
+        ". Choose one value for each field, then save the selection again."
+      );
+      return;
+    }
+
+    const replacements = Array.from(uniqueByKey.values()).filter((fact) => {
+      const current = profileFacts.find((item) => item.fact_key === fact.fact_key);
+      return current && current.fact_value !== fact.fact_value;
+    });
+    if (replacements.length > 0) {
+      const summary = replacements.slice(0, 6).map((fact) =>
+        displayFactKey(fact.fact_key) + ": " + fact.fact_value
+      ).join("\\n");
+      const more = replacements.length > 6 ? "\\n…and " + (replacements.length - 6) + " more" : "";
+      if (!window.confirm(
+        "These selected values will replace existing profile values:\\n\\n" + summary + more + "\\n\\nContinue?"
+      )) return;
+    }
+
+    clearNotice();
+    setBusy(true);
+    try {
+      const profileRows = Array.from(uniqueByKey.values()).map((fact) => ({
+        user_id: user.id,
+        fact_key: fact.fact_key,
+        fact_label: fact.fact_label || displayFactKey(fact.fact_key),
+        fact_value: fact.fact_value,
+        source_document_id: fact.document_id,
+        confidence: fact.confidence,
+        verified: true
+      }));
+      const { error: saveError } = await client.from("profile_facts").upsert(profileRows, { onConflict: "user_id,fact_key" });
+      if (saveError) throw saveError;
+
+      const selectedIds = selectedFacts.map((fact) => fact.id);
+      const { error: reviewError } = await client
+        .from("extracted_facts")
+        .update({ review_status: "approved" })
+        .in("id", selectedIds)
+        .eq("review_status", "pending");
+      if (reviewError) {
+        throw new Error("Profile values were saved, but their review status could not be updated. Refresh and check the profile before retrying.");
+      }
+
+      setMessage("Saved " + uniqueByKey.size + " selected value(s) to your reviewed profile. The extension can now search these saved facts without re-reading the documents.");
+      await refreshData();
+    } catch (reason) {
+      setError(messageFor(reason));
+      await refreshData();
     } finally {
       setBusy(false);
     }
@@ -461,6 +542,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
       const { error: saveError } = await client.from("profile_facts").upsert({
         user_id: user.id,
         fact_key: factKey,
+        fact_label: displayFactKey(factKey),
         fact_value: cleanValue,
         source_document_id: null,
         confidence: 1,
@@ -655,6 +737,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
                   pendingFacts={pendingFacts}
                   documents={documents}
                   onApprove={approveFact}
+                  onApproveSelected={approveSelectedFacts}
                   onReject={rejectFact}
                   onUpdate={updateFactValue}
                   onManualSave={saveManualFact}
