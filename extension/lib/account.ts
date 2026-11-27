@@ -32,6 +32,7 @@ export interface ExtensionAccount {
 export interface VerifiedProfileFact {
   id: string;
   fact_key: string;
+  fact_label: string | null;
   fact_value: string;
   source_document_id: string | null;
   confidence: number | null;
@@ -156,7 +157,7 @@ export async function getVerifiedProfileFacts(keys: string[]): Promise<VerifiedP
   const url = new URL(`${SUPABASE_URL}/rest/v1/profile_facts`);
   url.searchParams.set(
     "select",
-    "id,fact_key,fact_value,source_document_id,confidence,updated_at"
+    "id,fact_key,fact_label,fact_value,source_document_id,confidence,updated_at"
   );
   url.searchParams.set("verified", "eq.true");
   url.searchParams.set("fact_key", `in.(${uniqueKeys.join(",")})`);
