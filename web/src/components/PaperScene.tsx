@@ -58,10 +58,6 @@ export default function PaperScene({ className = "", label }: PaperSceneProps) {
           color: 0x315b46,
           roughness: 0.76
         });
-        const inkMaterial = new THREE.MeshStandardMaterial({
-          color: 0x718174,
-          roughness: 0.9
-        });
         const softInkMaterial = new THREE.MeshStandardMaterial({
           color: 0xd5ddd1,
           roughness: 0.9
