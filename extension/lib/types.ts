@@ -10,6 +10,7 @@ export type DocumentCategory =
 
 export interface CandidateFact {
   key: string;
+  label?: string;
   value: string;
   confidence: number;
   evidence: string;
