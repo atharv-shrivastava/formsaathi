@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main, 'feat/**']
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -59,6 +62,9 @@ jobs:
 
       - name: Run extraction tests
         run: pnpm test
+
+      - name: Type-check Chrome extension
+        run: pnpm --filter @formsaathi/extension typecheck
 
       - name: Build Chrome extension
         run: pnpm build:extension
