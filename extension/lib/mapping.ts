@@ -157,6 +157,9 @@ export function retrieveRelevantDocuments(fields: PortalField[], documents: Stor
     const category = categoryForKey(canonicalFieldKey(field));
     if (category) categories.add(category);
   });
+  // When a portal uses unusual labels, don't silently skip the local vault.
+  // The side panel still asks the user before uploading any uncached documents.
+  if (categories.size === 0) return documents;
   return documents.filter((document) => categories.has(document.category));
 }
 
