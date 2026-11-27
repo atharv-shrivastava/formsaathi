@@ -16,8 +16,9 @@ AI-assisted government form guidance and autofill. The product has two user-faci
 
 - Email/password sign-up and sign-in through Supabase Auth.
 - Private document upload and category management (PDF, JPG, PNG and WebP; 10 MB per file).
-- On-demand OCR using RapidOCR through the authenticated Node API.
-- Candidate facts are saved as pending and must be individually reviewed before they enter the user's verified profile.
+- Automatic document processing after upload (PDF, JPG, PNG and WebP; up to 10 MB): OCR extracts readable text, then Gemini identifies broad labelled fields and a likely document type across supported document categories.
+- Detected fields remain grouped under their source document in the Information Profile review queue. Users can edit, dismiss, select individual values or bulk-select values to save.
+- Only explicitly approved values enter `profile_facts`; the extension searches these saved, verified facts and does not re-run OCR over the user's document vault for every webpage.
 - Paper-form camera/gallery scan: OCR reads printed labels, Gemini vision locates writable areas, and exact reviewed profile values are overlaid onto a new downloadable image.
 - Application progress tracker.
 - Privacy centre with data deletion for documents, extracted candidates, verified profile facts and application records.
@@ -26,7 +27,7 @@ AI-assisted government form guidance and autofill. The product has two user-faci
 
 Supabase is the account and data layer: Auth identifies the user, Postgres stores user-owned metadata and reviewed facts, and a private Storage bucket holds original files. Row Level Security (RLS) scopes every user-owned table and the Storage bucket to the authenticated user.
 
-The web app and extension use the same Supabase account. During a browser form scan, the extension sends only visible field descriptors (labels, names, placeholders, control types and dropdown choices) to the authenticated Node API. Relevant extension-local documents are sent to hosted OCR only after a separate user confirmation; results are cached in the browser-local vault. The web app also provides a mobile-friendly paper-form scanner with camera and gallery inputs. It does not send values already typed into the government form. The API validates the Supabase user, reads only that user's verified profile facts under Row Level Security, filters to facts plausibly relevant to the detected fields, and sends those facts plus field descriptors to Google Gemini only after explicit user consent. The model returns fact-key matches, not personal values; the backend validates each match and supplies the exact stored value. The extension presents suggestions for review and requires per-field approval before filling. For paper forms, the selected photo is processed in memory: RapidOCR reads labels, Gemini vision returns normalized coordinates for clearly empty writing areas, and Sharp overlays the exact verified values. The new JPEG is returned to the browser for review and download; the uploaded photo is not written to the FormSaathi document vault.
+The web app and extension use the same Supabase account. After a user uploads a supported document to the private web vault, FormSaathi asks permission to process it: OCR reads its text and Gemini broadly extracts labelled fields and suggests a document type, regardless of the selected vault category. The extracted candidates are stored against that source document in `extracted_facts` with a pending review status and their original field label/evidence. The user can select many fields at once, edit or dismiss candidates, and save only the chosen values into `profile_facts` as verified information. Re-running extraction refreshes pending candidates but preserves prior approvals and dismissals. During a browser form scan, the extension sends only visible field descriptors (labels, names, placeholders, control types and dropdown choices) to the authenticated Node API. It does not OCR every web-vault document again. The backend retrieves the user's verified profile facts under Row Level Security, filters facts using their stored key and original document label, and sends only relevant facts plus field descriptors to Gemini after explicit consent. The model returns fact-key matches, not personal values; the backend validates each match and supplies the exact stored value. The extension presents suggestions for review and requires per-field approval before filling. For paper forms, the selected photo is processed in memory: RapidOCR reads labels, Gemini vision returns normalized coordinates for clearly empty writing areas, and Sharp overlays the exact verified values. The new JPEG is returned to the browser for review and download; the uploaded photo is not written to the FormSaathi document vault.
 
 ## Prerequisites
 
@@ -77,7 +78,7 @@ Start the web app in a third terminal:
 
     pnpm dev:web
 
-Open `http://localhost:5173`, create an account, upload a synthetic document and choose **Run OCR** from the document list. The local web app uses your local Node and RapidOCR services. Review candidates under Information profile before approving them.
+Open `http://localhost:5173`, create an account and upload a synthetic document. After the upload completes, FormSaathi asks permission to send it to the hosted/local Node OCR processor and optional Gemini field extractor. Review all candidates grouped under Information profile, then select the values you want to save. The local web app uses your local Node and RapidOCR services; broad all-field extraction requires `GEMINI_API_KEY` on the Node API.
 
 To run the extension separately:
 
@@ -99,7 +100,7 @@ Load `extension/.output/chrome-mv3-dev` from `chrome://extensions`. The extensio
 
 ## Important prototype safety note
 
-Use synthetic documents for demos until the Supabase project, RLS policies, access controls, backup retention, OCR service and deployment have been reviewed. Supabase Storage is configured as private, but this MVP is not end-to-end encrypted and has not had an independent security audit. Do not expose the current unauthenticated local OCR service to the public internet. Do not send Aadhaar, PAN, bank, income or other real personal data to the optional external AI route in this prototype.
+Use synthetic documents for demos until the Supabase project, RLS policies, access controls, backup retention, OCR service and deployment have been reviewed. Supabase Storage is configured as private, but this MVP is not end-to-end encrypted and has not had an independent security audit. Do not expose the current unauthenticated local OCR service to the public internet. Document-wide extraction sends OCR text to Gemini when `GEMINI_API_KEY` is configured, so users must explicitly consent before processing. Do not upload real Aadhaar, PAN, bank, income or other sensitive documents in this prototype until its privacy, retention and external AI processing arrangements have been reviewed.
 
 The extension does not automatically submit government applications. CAPTCHA, payments, identity verification and final submission stay under the applicant's control.
 
@@ -108,7 +109,8 @@ The extension does not automatically submit government applications. CAPTCHA, pa
 - AI form analysis requires `GEMINI_API_KEY` on the hosted Node API. Each request requires explicit consent. Only relevant verified profile facts and detected field descriptions are sent to Gemini; the backend returns original stored values only after validating model-selected fact keys.
 - Paper-form image filling is AI-assisted, not guaranteed. Gemini's placement coordinates can be imperfect. The user must inspect every overlay and the original image remains unchanged. The route accepts JPG, PNG and WebP photos up to 10 MB.
 - The hosted RapidOCR processor uses a free CPU service and may take longer on its first request or after inactivity.
-- Candidate extraction still uses labelled-line heuristics; OCR text is not automatically treated as verified profile data.
+- Broad field extraction depends on Gemini being configured on the Node API. If Gemini is unavailable, the backend falls back to a small set of conservative labelled-line patterns and clearly reports that limitation. No OCR candidate becomes verified until the user approves it.
+- Extraction is best-effort: handwriting, poor scans, unusual layouts, image-only pages, faint text and non-English scripts may be missed or misread. Users must compare candidates with the original document.
 - The default RapidOCR model is English-oriented. Hindi/Devanagari recognition requires configuring and evaluating the corresponding RapidOCR model before relying on it.
 - Category retrieval does not yet distinguish every document subtype such as Class 10 versus Class 12 unless separately classified.
 - Complex custom widgets, closed Shadow DOM, canvas-rendered forms and cross-origin frames may require manual assistance.
