@@ -1,4 +1,4 @@
-import { validateAiMappings } from "./form-analysis.js";
+import { retrieveProfileFactsForFields, validateAiMappings } from "./form-analysis.js";
 
 export function buildPaperFormFields(ocrText) {
   const lines = String(ocrText || "")
@@ -21,14 +21,25 @@ export function buildPaperFormFields(ocrText) {
 
 export function validatePaperPlacements(rawPlacements, ocrFields, verifiedFacts) {
   if (!Array.isArray(rawPlacements)) return [];
+  const retrievedFacts = retrieveProfileFactsForFields(ocrFields, verifiedFacts);
+  const candidatesByField = new Map(retrievedFacts.map((item) => [
+    item.fieldId,
+    item.candidates
+  ]));
   const mappings = validateAiMappings(
-    rawPlacements.map((placement) => ({
-      fieldId: String(placement?.lineIndex ?? ""),
-      factKey: String(placement?.factKey || ""),
-      confidence: Number(placement?.confidence)
-    })),
+    rawPlacements.map((placement) => {
+      const fieldId = String(placement?.lineIndex ?? "");
+      const factKey = String(placement?.factKey || "");
+      const candidate = (candidatesByField.get(fieldId) || [])
+        .find((item) => item.factKey === factKey);
+      return {
+        fieldId,
+        factId: candidate?.factId || "",
+        confidence: Number(placement?.confidence)
+      };
+    }),
     ocrFields,
-    verifiedFacts
+    retrievedFacts
   );
   const approved = new Map(mappings.map((mapping) => [mapping.fieldId + "|" + mapping.factKey, mapping]));
   const placements = [];

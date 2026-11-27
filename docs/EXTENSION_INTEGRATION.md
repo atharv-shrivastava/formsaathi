@@ -41,11 +41,11 @@ After the user confirms the one-time AI consent prompt, the extension sends the 
 1. Express validates the Supabase access token and identifies the user.
 2. The backend creates a Supabase client carrying that user's access token.
 3. The backend queries `public.profile_facts` for `verified = true`. RLS scopes the query to the authenticated user; no client-supplied user ID is trusted.
-4. Server-side filtering limits the model context to approved profile facts that appear relevant to the detected field descriptors.
-5. The backend sends those relevant fact keys/values and field descriptors to Google Gemini using the server-side `GEMINI_API_KEY`.
-6. Gemini returns only `fieldId`, `factKey` and a confidence score. It does not return personal values.
-7. The backend validates that each field ID belongs to the scan, the fact key exists in the user's verified rows, confidence is at least 0.70, and dropdown values are exact listed options.
-8. The backend returns the exact original stored value from Supabase with its source metadata.
+4. The backend retrieves the user's approved profile facts under RLS, then runs lightweight RAG separately for every detected field. Regex patterns recognize common semantic types (for example applicant name, parent name, date of birth, email, phone, postal code, income and bank identifiers); lexical similarity over the original fact label and fact key retrieves the best candidates for less-common labels. This is retrieval, not automatic approval.
+5. Gemini receives the complete detected field list for the scan (up to the API's 120-field safety limit), plus a small ranked candidate list for each field. It chooses at most one candidate for a field or omits it. Irrelevant profile facts are not sent just because they exist.
+6. Gemini returns only `fieldId`, `factId` and a confidence score. It does not return personal values.
+7. The backend checks that the chosen fact was actually retrieved for that exact field, that the field/fact semantic roles do not conflict (especially applicant vs. parent names), confidence is at least 0.72, the field is supported, and dropdown values are exact listed options.
+8. The backend returns the exact original stored value from Supabase with its source metadata. The user still reviews and approves each value in the extension.
 
 The extension displays the suggestion and the user can edit or approve each field individually. FormSaathi never submits the government application.
 
@@ -114,8 +114,8 @@ The hosted route returns a clear configuration error until the key is present. T
 - Every API request requires a valid Supabase user token.
 - Supabase RLS restricts profile reads to the signed-in user.
 - Only verified profile facts are considered.
-- The backend filters facts to relevant field labels before sending anything to Gemini.
-- AI use requires explicit consent at scan time.
+- The backend retrieves only a small ranked set of approved facts per field using regex hints and lexical RAG, while sending the full detected field-descriptor list (maximum 120 fields) to Gemini.
+- AI use requires explicit consent at scan time. After consent, the full detected field metadata is sent to Gemini through the backend, together with only the retrieved approved-fact candidates for those fields.
 - Typed form values and original documents are not sent to Gemini.
 - The model cannot supply the final personal value; the backend returns the exact verified database value for a validated fact key.
 - The routes are rate-limited per user and cap fields, options, profile facts and file sizes.
