@@ -348,6 +348,71 @@ export default function App() {
     }
   }
 
+  async function fillAllAvailable() {
+    const pendingRows = rows
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) =>
+        Boolean(row.value.trim()) &&
+        !row.field.isFile &&
+        row.status !== "filled" &&
+        row.status !== "conflict"
+      );
+
+    if (pendingRows.length === 0) {
+      setStatus("There are no available extracted values to fill. Resolve conflicts or review the scan first.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "FormSaathi is ready to fill " + pendingRows.length +
+      " field(s) using the values shown in this panel. Check the suggestions first. " +
+      "This may replace values already entered in those fields. FormSaathi will not submit the form. Continue?"
+    );
+    if (!confirmed) return;
+
+    setBusy(true);
+    setStatus("Filling " + pendingRows.length + " field(s). Keep this page open…");
+    const filledIds = new Set<string>();
+    const failures: string[] = [];
+
+    try {
+      const tabId = await getActiveTabId();
+      for (const { row } of pendingRows) {
+        try {
+          const response = await chrome.tabs.sendMessage(tabId, {
+            type: "FS_FILL",
+            fieldId: row.field.id,
+            value: row.value
+          }) as { ok?: boolean; message?: string };
+
+          if (response?.ok) {
+            filledIds.add(row.field.id);
+          } else {
+            failures.push(row.field.label + ": " + (response?.message || "Could not fill this field."));
+          }
+        } catch (error) {
+          failures.push(row.field.label + ": " + (error instanceof Error ? error.message : "Could not reach this field."));
+        }
+      }
+
+      setRows((current) => current.map((row) =>
+        filledIds.has(row.field.id) ? { ...row, status: "filled" } : row
+      ));
+
+      const successCount = filledIds.size;
+      const failureCount = failures.length;
+      setStatus(
+        "Filled " + successCount + " of " + pendingRows.length + " available field(s)." +
+        (failureCount ? " " + failureCount + " field(s) could not be filled; review them individually." : " Review the completed fields before submitting the portal form.") +
+        " FormSaathi did not submit the application."
+      );
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not fill the fields on this page.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function editValue(index: number, value: string) {
     setRows((current) => current.map((row, itemIndex) =>
       itemIndex === index ? { ...row, value, status: row.status === "filled" || row.status === "conflict" ? "needs-review" : row.status } : row
@@ -387,6 +452,12 @@ export default function App() {
   }
 
   const filledCount = rows.filter((row) => row.status === "filled").length;
+  const fillableCount = rows.filter((row) =>
+    Boolean(row.value.trim()) &&
+    !row.field.isFile &&
+    row.status !== "filled" &&
+    row.status !== "conflict"
+  ).length;
 
   return (
     <main className="app-shell">
@@ -498,6 +569,15 @@ export default function App() {
             <>
               <div className="progress-row"><span>{filledCount} of {rows.length} fields filled</span><b>{Math.round((filledCount / rows.length) * 100)}%</b></div>
               <div className="progress-track"><div style={{ width: (filledCount / rows.length * 100) + "%" }} /></div>
+              <button
+                type="button"
+                className="primary-button full bulk-fill-button"
+                disabled={busy || fillableCount === 0}
+                onClick={() => void fillAllAvailable()}
+              >
+                {busy ? "Working…" : fillableCount > 0 ? "Fill all available fields (" + fillableCount + ")" : "No fields ready to fill"}
+              </button>
+              <p className="muted small">Fills only fields with a value. File uploads, conflicts and already-filled fields are skipped. The application is never submitted.</p>
               <button className="secondary-button full" disabled={busy} onClick={() => void tryAiMapping()}>Re-run AI form analysis</button>
               <p className="muted small">Uses the hosted FormSaathi backend and Gemini. Each AI request requires your confirmation.</p>
               <div className="mapping-list">
