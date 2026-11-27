@@ -313,6 +313,7 @@ async function loadVerifiedProfileFacts(accessToken) {
       .from("profile_facts")
       .select("id,fact_key,fact_label,fact_value,source_document_id,confidence,updated_at")
       .eq("verified", true)
+      .is("source_document_id", null)
       .order("updated_at", { ascending: false })
       .limit(160),
     userClient
