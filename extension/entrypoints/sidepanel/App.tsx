@@ -225,9 +225,6 @@ export default function App() {
       }
 
       const relevantDocuments = retrieveRelevantDocuments(nextScan.fields, documents);
-      const fieldKeys = Array.from(new Set(
-        nextScan.fields.map(canonicalFieldKey).filter((key): key is string => Boolean(key))
-      ));
       const relevantCategories = Array.from(new Set(
         nextScan.fields.map(canonicalFieldKey).map(categoryForKey).filter(Boolean)
       ));
