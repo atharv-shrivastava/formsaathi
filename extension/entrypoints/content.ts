@@ -194,7 +194,7 @@ function highlightField(fieldId: string, label: string): boolean {
 }
 
 function fillField(fieldId: string, value: string): { ok: boolean; message: string } {
-  const element = document.querySelector<HTMLElement>("[" + KEY_ATTRIBUTE + "=\"" + CSS.escape(fieldId) + "\"]");
+  const element = findKeyedElement(fieldId);
   if (!element || !isVisible(element)) return { ok: false, message: "The field is no longer available. Scan the page again." };
   if (element instanceof HTMLInputElement) {
     if (["file", "password", "hidden", "submit", "button", "reset", "checkbox", "radio", "image"].includes(element.type) || element.disabled || element.readOnly) {
