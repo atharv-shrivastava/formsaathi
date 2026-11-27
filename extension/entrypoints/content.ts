@@ -38,10 +38,28 @@ function getLabel(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectEl
   return parentText.slice(0, 100) || "Unlabelled field";
 }
 
+function isFeedbackTextarea(element: HTMLTextAreaElement): boolean {
+  const context = [
+    getLabel(element),
+    element.name,
+    element.id,
+    element.placeholder,
+    element.getAttribute("aria-label"),
+    element.getAttribute("aria-describedby")
+  ].filter(Boolean).join(" ");
+
+  return /\b(feedback|comments?|suggestions?|reviews?|complaints?|remarks?|testimonials?|bug reports?|report a problem|how can we improve|tell us what you think|share your thoughts)\b/i.test(context);
+}
+
 function scanPage(): ScanResult {
-  const selector = "input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='reset']), textarea, select";
+  const selector = "input:not([type='hidden']):not([type='checkbox']):not([type='radio']):not([type='submit']):not([type='button']):not([type='reset']), textarea, select";
   const elements = Array.from(document.querySelectorAll<HTMLElement>(selector))
-    .filter((element) => isVisible(element));
+    .filter((element) => {
+      if (!isVisible(element)) return false;
+      if (element instanceof HTMLInputElement && ["checkbox", "radio"].includes(element.type)) return false;
+      if (element instanceof HTMLTextAreaElement && isFeedbackTextarea(element)) return false;
+      return true;
+    });
 
   const fields: PortalField[] = elements.map((element, index) => {
     const control = element as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
