@@ -407,12 +407,11 @@ app.post(
       const retrievedFacts = fields.map((field, index) => {
         const label = [field.label, field.name, field.placeholder].filter(Boolean).join(" ");
         const normalizedLabel = label.toLowerCase().replace(/[^a-z0-9]+/g, " ");
-        const documentSpecific = /(aadhaar|aadhar|pan card|passport|certificate number|document number|roll number|registration number|issue date|expiry date|percentage|cgpa|sgpa|marks obtained)/.test(normalizedLabel);
+        const documentSpecific = /(aadhaar|aadhar|pan card|passport|certificate|document number|serial number|roll number|registration number|enrolment|student id|admission number|issue date|expiry date|percentage|cgpa|sgpa|marks obtained|marksheet|grade)/.test(normalizedLabel);
         const preferred = documentSpecific ? documentRetrieved[index] : generalRetrieved[index];
-        const fallback = documentSpecific ? generalRetrieved[index] : documentRetrieved[index];
         return {
           fieldId: field.id,
-          candidates: preferred.candidates.length ? preferred.candidates : fallback.candidates
+          candidates: preferred.candidates
         };
       });
       const matchedFieldCount = retrievedFacts.filter((item) => item.candidates.length > 0).length;
