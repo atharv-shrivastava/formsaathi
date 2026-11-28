@@ -101,6 +101,13 @@ export function retrieveRelevantDocuments(fields: PortalField[], documents: Stor
   return documents.filter((document) => categories.has(document.category));
 }
 
+const documentSpecificKeys = new Set([
+  "aadhaar_number", "pan_number", "certificate_number", "document_number",
+  "roll_number", "registration_number", "enrolment_number", "issue_date",
+  "expiry_date", "passing_year", "percentage", "cgpa", "sgpa",
+  "marks_obtained", "total_marks", "board_name", "school_name"
+]);
+
 function normalizedFactKey(key: string): string | null {
   return canonicalFactKey(key) || normalize(key).replace(/\s+/g, "_");
 }
@@ -128,6 +135,11 @@ export function createReviewRows(
     if (!key || field.isFile) return { field, canonicalKey: key, value: "", status: "unmapped" };
 
     let candidates = facts.filter((fact) => normalizedFactKey(fact.key) === key);
+    const documentSpecific = documentSpecificKeys.has(key);
+    const preferredScope = documentSpecific ? "document" : "general";
+    const scoped = candidates.filter((fact) => fact.sourceType === preferredScope);
+    if (scoped.length) candidates = scoped;
+    else if (documentSpecific) candidates = candidates.filter((fact) => fact.sourceType !== "general");
     if (!candidates.length && ["first_name", "middle_name", "last_name"].includes(key)) {
       candidates = facts.filter(isApplicantFullNameFact).map((fact) => ({
         ...fact,
