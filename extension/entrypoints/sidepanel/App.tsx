@@ -241,7 +241,8 @@ export default function App() {
             confidence: fact.confidence ?? 0.92,
             evidence: "Reviewed and approved in your FormSaathi information profile.",
             sourceId: fact.id,
-            sourceName: "FormSaathi verified profile"
+            sourceName: "General information",
+            sourceType: "general"
           });
         }
         const documentFacts = await getApprovedDocumentFacts();
@@ -252,7 +253,8 @@ export default function App() {
             confidence: fact.confidence ?? 0.9,
             evidence: fact.evidence || "Approved value extracted from a specific uploaded document.",
             sourceId: fact.id,
-            sourceName: "Document-specific record"
+            sourceName: "Document-specific information",
+            sourceType: "document"
           });
         }
       }
@@ -284,7 +286,7 @@ export default function App() {
                 documentFacts = extracted.facts;
                 await saveDocument({ ...document, cachedText: extracted.text, cachedFacts: documentFacts, cachedAt: Date.now() });
               }
-              for (const fact of documentFacts) facts.push({ ...fact, sourceId: document.id, sourceName: document.name });
+              for (const fact of documentFacts) facts.push({ ...fact, sourceId: document.id, sourceName: document.name, sourceType: "document" });
             }
             localDocumentCount = relevantDocuments.length;
             setDocuments(await listDocuments());
