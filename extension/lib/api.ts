@@ -21,6 +21,7 @@ export interface FormAnalysisMapping {
   value: string;
   confidence: number;
   sourceDocumentId: string | null;
+  sourceType?: "general" | "document";
   updatedAt: string | null;
 }
 

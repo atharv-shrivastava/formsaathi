@@ -44,6 +44,19 @@ const pageTitles: Record<Page, { title: string; subtitle: string }> = {
   privacy: { title: "Privacy centre", subtitle: "See how your information is stored and control your data." }
 };
 
+const generalProfileFactKeys = new Set([
+  "applicant_name", "full_name", "first_name", "middle_name", "last_name",
+  "father_name", "mother_name", "guardian_name", "date_of_birth",
+  "email", "email_address", "phone", "phone_number", "mobile_number",
+  "address", "permanent_address", "correspondence_address", "city", "state",
+  "pincode", "postal_code", "nationality", "religion", "caste",
+  "annual_income", "family_income", "bank_account_number", "ifsc_code", "gender", "district"
+]);
+
+function belongsInGeneralProfile(key: string): boolean {
+  return generalProfileFactKeys.has(key);
+}
+
 function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + " KB";
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
@@ -459,10 +472,11 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
   }
 
   async function approveFact(fact: ExtractedFact) {
-    const current = profileFacts.find((item) => item.fact_key === fact.fact_key);
+    const saveToGeneralProfile = belongsInGeneralProfile(fact.fact_key);
+    const current = saveToGeneralProfile ? profileFacts.find((item) => item.fact_key === fact.fact_key) : undefined;
     if (current && current.fact_value !== fact.fact_value) {
       const confirmed = window.confirm(
-        "Your profile currently stores \"" + current.fact_value + "\" for " + displayFactKey(fact.fact_key) +
+        "Your general profile currently stores \"" + current.fact_value + "\" for " + displayFactKey(fact.fact_key) +
         ". Replace it with \"" + fact.fact_value + "\" from this document?"
       );
       if (!confirmed) return;
@@ -470,19 +484,23 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
     clearNotice();
     setBusy(true);
     try {
-      const { error: saveError } = await client.from("profile_facts").upsert({
-        user_id: user.id,
-        fact_key: fact.fact_key,
-        fact_label: fact.fact_label || displayFactKey(fact.fact_key),
-        fact_value: fact.fact_value,
-        source_document_id: fact.document_id,
-        confidence: fact.confidence,
-        verified: true
-      }, { onConflict: "user_id,fact_key" });
-      if (saveError) throw saveError;
+      if (saveToGeneralProfile) {
+        const { error: saveError } = await client.from("profile_facts").upsert({
+          user_id: user.id,
+          fact_key: fact.fact_key,
+          fact_label: fact.fact_label || displayFactKey(fact.fact_key),
+          fact_value: fact.fact_value,
+          source_document_id: fact.document_id,
+          confidence: fact.confidence,
+          verified: true
+        }, { onConflict: "user_id,fact_key" });
+        if (saveError) throw saveError;
+      }
       const { error: reviewError } = await client.from("extracted_facts").update({ review_status: "approved" }).eq("id", fact.id);
       if (reviewError) throw reviewError;
-      setMessage("Saved " + displayFactKey(fact.fact_key) + " to your reviewed profile.");
+      setMessage(saveToGeneralProfile
+        ? "Approved and saved " + displayFactKey(fact.fact_key) + " to your general profile."
+        : "Approved " + displayFactKey(fact.fact_key) + " as document-specific information. It stays attached to this document.");
       await refreshData();
     } catch (reason) {
       setError(messageFor(reason));
@@ -493,23 +511,26 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
 
   async function approveSelectedFacts(selectedFacts: ExtractedFact[]) {
     if (selectedFacts.length === 0) return;
-    const uniqueByKey = new Map<string, ExtractedFact>();
+    const generalByKey = new Map<string, ExtractedFact>();
     const conflictingKeys = new Set<string>();
-    for (const fact of selectedFacts) {
-      const existing = uniqueByKey.get(fact.fact_key);
+    const documentSpecificFacts = selectedFacts.filter((fact) => !belongsInGeneralProfile(fact.fact_key));
+
+    for (const fact of selectedFacts.filter((item) => belongsInGeneralProfile(item.fact_key))) {
+      const existing = generalByKey.get(fact.fact_key);
       if (existing && existing.fact_value !== fact.fact_value) conflictingKeys.add(fact.fact_key);
-      else if (!existing) uniqueByKey.set(fact.fact_key, fact);
+      else if (!existing) generalByKey.set(fact.fact_key, fact);
     }
     if (conflictingKeys.size > 0) {
       setError(
-        "You selected different values for the same profile field: " +
+        "You selected different values for the same general profile field: " +
         Array.from(conflictingKeys).map(displayFactKey).join(", ") +
-        ". Choose one value for each field, then save the selection again."
+        ". Choose one value for each general field. Different document-specific values can remain attached to separate documents."
       );
       return;
     }
 
-    const replacements = Array.from(uniqueByKey.values()).filter((fact) => {
+    const generalFacts = Array.from(generalByKey.values());
+    const replacements = generalFacts.filter((fact) => {
       const current = profileFacts.find((item) => item.fact_key === fact.fact_key);
       return current && current.fact_value !== fact.fact_value;
     });
@@ -519,24 +540,26 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
       ).join("\n");
       const more = replacements.length > 6 ? "\n…and " + (replacements.length - 6) + " more" : "";
       if (!window.confirm(
-        "These selected values will replace existing profile values:\n\n" + summary + more + "\n\nContinue?"
+        "These selected values will replace existing general profile values:\n\n" + summary + more + "\n\nContinue?"
       )) return;
     }
 
     clearNotice();
     setBusy(true);
     try {
-      const profileRows = Array.from(uniqueByKey.values()).map((fact) => ({
-        user_id: user.id,
-        fact_key: fact.fact_key,
-        fact_label: fact.fact_label || displayFactKey(fact.fact_key),
-        fact_value: fact.fact_value,
-        source_document_id: fact.document_id,
-        confidence: fact.confidence,
-        verified: true
-      }));
-      const { error: saveError } = await client.from("profile_facts").upsert(profileRows, { onConflict: "user_id,fact_key" });
-      if (saveError) throw saveError;
+      if (generalFacts.length) {
+        const profileRows = generalFacts.map((fact) => ({
+          user_id: user.id,
+          fact_key: fact.fact_key,
+          fact_label: fact.fact_label || displayFactKey(fact.fact_key),
+          fact_value: fact.fact_value,
+          source_document_id: fact.document_id,
+          confidence: fact.confidence,
+          verified: true
+        }));
+        const { error: saveError } = await client.from("profile_facts").upsert(profileRows, { onConflict: "user_id,fact_key" });
+        if (saveError) throw saveError;
+      }
 
       const selectedIds = selectedFacts.map((fact) => fact.id);
       const { error: reviewError } = await client
@@ -545,10 +568,14 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         .in("id", selectedIds)
         .eq("review_status", "pending");
       if (reviewError) {
-        throw new Error("Profile values were saved, but their review status could not be updated. Refresh and check the profile before retrying.");
+        throw new Error("Some values may have been saved, but their review status could not be updated. Refresh and check the documents before retrying.");
       }
 
-      setMessage("Saved " + uniqueByKey.size + " selected value(s) to your reviewed profile. The extension can now search these saved facts without re-reading the documents.");
+      setMessage(
+        "Approved " + selectedFacts.length + " value(s): " + generalFacts.length +
+        " saved to general information and " + documentSpecificFacts.length +
+        " kept separately with their source documents."
+      );
       await refreshData();
     } catch (reason) {
       setError(messageFor(reason));
@@ -990,7 +1017,6 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
     { key: "state", label: "State", type: "text" },
     { key: "gender", label: "Gender", type: "text" },
     { key: "annual_income", label: "Annual family income", type: "text" },
-    { key: "percentage", label: "Marks percentage", type: "text" },
     { key: "caste_category", label: "Category", type: "text" },
     { key: "bank_account_number", label: "Bank account number", type: "text" },
     { key: "ifsc_code", label: "IFSC code", type: "text" }
@@ -1042,7 +1068,7 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
         )}
       </section>
       <section className="surface-card review-section">
-        <div className="section-head"><div><p className="eyebrow">Needs your review</p><h3>Extracted candidates</h3><p className="muted">Fields stay attached to their source document until you choose which values belong in your reusable profile.</p></div><span className={pendingFacts.length ? "review-count active" : "review-count"}>{pendingFacts.length} pending</span></div>
+        <div className="section-head"><div><p className="eyebrow">Needs your review</p><h3>Extracted candidates</h3><p className="muted">Approve reusable personal details into your general profile. Document identifiers and certificate-specific values remain attached to their source document.</p></div><span className={pendingFacts.length ? "review-count active" : "review-count"}>{pendingFacts.length} pending</span></div>
         {pendingFacts.length === 0 ? <EmptyState title="You're all caught up" text="New OCR results will appear here for your review." /> : (
           <>
             <div className="review-bulk-toolbar">
@@ -1053,7 +1079,7 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
                 disabled={busy}
               /><span>Select all detected fields</span></label>
               <button className="button primary candidate-bulk-save" disabled={busy || selectedFactIds.length === 0} onClick={() => onApproveSelected(pendingFacts.filter((fact) => selectedFactIds.includes(fact.id)))}>
-                Save {selectedFactIds.length ? selectedFactIds.length + " selected" : "selected"} to profile
+                Approve {selectedFactIds.length ? selectedFactIds.length + " selected" : "selected"}
               </button>
             </div>
             <div className="candidate-document-groups">

@@ -17,7 +17,12 @@ const semanticPatterns = [
   ["phone", /\b(mobile|phone|telephone|contact number|whatsapp)\b/],
   ["postal_code", /\b(pin code|pincode|postal code|zip code|postcode)\b/],
   ["ifsc", /\b(ifsc)\b/],
+  ["pan_number", /\b(pan card|permanent account number|pan number)\b/],
   ["bank_account", /\b(bank account|account number|account no|a c number)\b/],
+  ["aadhaar_number", /\b(aadhaar|aadhar|uidai|uid number)\b/],
+  ["passport_number", /\b(passport number|passport no)\b/],
+  ["certificate_number", /\b(certificate number|certificate no|document number)\b/],
+  ["roll_number", /\b(roll number|roll no|enrolment number|registration number)\b/],
   ["annual_income", /\b(annual|yearly|family|household)?\s*income\b/],
   ["percentage", /\b(percentage|percent|aggregate marks|marks obtained|cgpa|sgpa)\b/],
   ["gender", /\b(gender|sex)\b/],
@@ -42,6 +47,11 @@ const factAliases = {
   annual_income: ["annual income", "family income", "annual family income", "income per year"],
   family_income: ["annual income", "family income", "annual family income", "income per year"],
   bank_account_number: ["bank account number", "account number", "account no"],
+  aadhaar_number: ["aadhaar number", "aadhar number", "uid number", "uidai number"],
+  pan_number: ["pan number", "pan card number", "permanent account number"],
+  passport_number: ["passport number", "passport no"],
+  certificate_number: ["certificate number", "certificate no", "document number"],
+  roll_number: ["roll number", "roll no", "registration number", "enrolment number"],
   ifsc_code: ["ifsc", "ifsc code"],
   postal_code: ["postal code", "pin code", "pincode", "zip code"],
   pincode: ["postal code", "pin code", "pincode", "zip code"],
@@ -211,6 +221,7 @@ export function retrieveProfileFactsForFields(fields, facts) {
           retrievalScore: Number(retrieval.score.toFixed(3)),
           retrievalReasons: retrieval.reasons,
           sourceDocumentId: fact.source_document_id || null,
+          sourceType: fact.sourceType || "general",
           updatedAt: fact.updated_at || null
         } : null;
       })
@@ -243,7 +254,8 @@ export function sanitizeDetectedFields(rawFields) {
     const tagName = String(raw.tagName || "").toLowerCase();
     const inputType = String(raw.inputType || tagName).toLowerCase().slice(0, 40);
     if (!id || !/^[a-zA-Z0-9_-]+$/.test(id) || seen.has(id)) continue;
-    if (!["input", "textarea", "select"].includes(tagName)) continue;
+    const isContentEditable = raw.isContentEditable === true && ["div", "span"].includes(tagName);
+    if (!["input", "textarea", "select"].includes(tagName) && !isContentEditable) continue;
     if (blockedInputTypes.has(inputType)) continue;
     if (isFeedbackTextarea(raw)) continue;
     seen.add(id);
@@ -263,7 +275,8 @@ export function sanitizeDetectedFields(rawFields) {
       placeholder: String(raw.placeholder || "").trim().slice(0, 160),
       name: String(raw.name || "").trim().slice(0, 120),
       options,
-      isFile: raw.isFile === true || inputType === "file"
+      isFile: raw.isFile === true || inputType === "file",
+      isContentEditable
     });
   }
 
@@ -310,6 +323,7 @@ export function validateAiMappings(rawMappings, fields, retrievedFacts) {
       value: candidate.factValue,
       confidence,
       sourceDocumentId: candidate.sourceDocumentId || null,
+      sourceType: candidate.sourceType || "general",
       updatedAt: candidate.updatedAt || null
     };
     const current = bestByField.get(field.id);

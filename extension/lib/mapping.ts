@@ -9,30 +9,40 @@ const aliases: Record<string, string[]> = {
   first_name: ["first name", "firstname", "given name", "forename", "fname", "applicant first name", "candidate first name"],
   middle_name: ["middle name", "middlename", "second name"],
   last_name: ["last name", "lastname", "surname", "family name", "lname", "applicant last name", "candidate last name"],
-  applicant_name: ["applicant name", "applicants name", "name of applicant", "candidate name", "student name", "full name", "applicant full name", "name"],
+  applicant_name: ["applicant name", "applicants name", "name of applicant", "candidate name", "student name", "full name", "applicant full name", "name of candidate", "name of student", "beneficiary name", "applicant's full name", "name"],
   father_name: ["father name", "fathers name", "name of father", "father full name", "father fullname", "father"],
   mother_name: ["mother name", "mothers name", "name of mother", "mother full name", "mother fullname", "mother"],
   guardian_name: ["guardian name", "name of guardian", "parent name", "parents name", "legal guardian"],
-  date_of_birth: ["date of birth", "dob", "birth date", "birthdate", " जन्म तिथि"],
-  annual_income: ["annual family income", "family annual income", "family income", "annual income", "yearly income", "income per annum", "annual earnings", "income"],
+  date_of_birth: ["date of birth", "dob", "birth date", "birthdate", " जन्म तिथि", " जन्मतिथि", "date birth"],
+  annual_income: ["annual family income", "family annual income", "family income", "annual income", "yearly income", "income per annum", "annual earnings", "total family income", "gross annual income", "income"],
   percentage: ["class 12 percentage", "12th percentage", "aggregate percentage", "marks percentage", "percentage", "class xii percentage", "overall percentage"],
-  bank_account_number: ["bank account number", "account number", "account no", "a c number", "ac number", "bank a c no"],
+  bank_account_number: ["bank account number", "account number", "account no", "a c number", "ac number", "bank a c no", "savings account number", "bank a c number"],
   ifsc_code: ["ifsc code", "ifsc"],
   email: ["email address", "e mail", "email id", "mail id", "email"],
-  phone: ["mobile number", "mobile no", "contact number", "phone number", "telephone", "phone", "mobile"],
+  phone: ["mobile number", "mobile no", "contact number", "phone number", "telephone", "phone", "mobile", "cell number", "primary mobile", "registered mobile number"],
   address: ["permanent address", "residential address", "correspondence address", "postal address", "address"],
   city: ["city", "town"],
   state: ["state", "province"],
-  pincode: ["pin code", "pincode", "postal code", "zip code", "zip"],
-  aadhaar_number: ["aadhaar number", "aadhar number", "uid number", "aadhaar no", "aadhar no"],
-  pan_number: ["pan number", "pan card number", "permanent account number", "pan"],
+  pincode: ["pin code", "pincode", "postal code", "zip code", "zip", "area pin", "postal pin code"],
+  aadhaar_number: ["aadhaar number", "aadhar number", "uid number", "aadhaar no", "aadhar no", "unique identification number", "uidai number"],
+  pan_number: ["pan number", "pan card number", "permanent account number", "income tax pan", "pan"],
   nationality: ["nationality", "citizenship"],
   religion: ["religion"],
   caste: ["caste", "category"],
   domicile_state: ["domicile state", "state of domicile"],
   school_name: ["school name", "name of school", "institution name"],
   roll_number: ["roll number", "roll no", "registration number", "enrolment number"],
-  passing_year: ["passing year", "year of passing", "completion year"]
+  passing_year: ["passing year", "year of passing", "completion year"],
+  certificate_number: ["certificate number", "certificate no", "certificate id"],
+  document_number: ["document number", "document no", "serial number", "reference number"],
+  passport_number: ["passport number", "passport no", "passport id"],
+  issue_date: ["issue date", "date of issue", "issued on"],
+  expiry_date: ["expiry date", "expiration date", "valid until"],
+  marks_obtained: ["marks obtained", "marks scored", "total marks obtained"],
+  total_marks: ["total marks", "maximum marks"],
+  cgpa: ["cgpa", "cumulative grade point average"],
+  sgpa: ["sgpa", "semester grade point average"],
+  board_name: ["board name", "education board", "exam board"]
 };
 
 function normalize(value: string): string {
@@ -101,6 +111,15 @@ export function retrieveRelevantDocuments(fields: PortalField[], documents: Stor
   return documents.filter((document) => categories.has(document.category));
 }
 
+const generalProfileKeys = new Set([
+  "applicant_name", "full_name", "first_name", "middle_name", "last_name",
+  "father_name", "mother_name", "guardian_name", "date_of_birth",
+  "email", "email_address", "phone", "phone_number", "mobile_number",
+  "address", "permanent_address", "correspondence_address", "city", "state",
+  "pincode", "postal_code", "nationality", "religion", "caste",
+  "annual_income", "family_income", "bank_account_number", "ifsc_code", "gender", "district"
+]);
+
 function normalizedFactKey(key: string): string | null {
   return canonicalFactKey(key) || normalize(key).replace(/\s+/g, "_");
 }
@@ -128,6 +147,11 @@ export function createReviewRows(
     if (!key || field.isFile) return { field, canonicalKey: key, value: "", status: "unmapped" };
 
     let candidates = facts.filter((fact) => normalizedFactKey(fact.key) === key);
+    const documentSpecific = !generalProfileKeys.has(key);
+    const preferredScope = documentSpecific ? "document" : "general";
+    const scoped = candidates.filter((fact) => fact.sourceType === preferredScope);
+    if (scoped.length) candidates = scoped;
+    else if (documentSpecific) candidates = candidates.filter((fact) => fact.sourceType !== "general");
     if (!candidates.length && ["first_name", "middle_name", "last_name"].includes(key)) {
       candidates = facts.filter(isApplicantFullNameFact).map((fact) => ({
         ...fact,
