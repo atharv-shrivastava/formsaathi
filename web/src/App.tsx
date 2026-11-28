@@ -42,7 +42,7 @@ const pageTitles: Record<Page, { title: string; subtitle: string }> = {
   profile: { title: "Information profile", subtitle: "Review extracted information before it is saved as verified." },
   applications: { title: "Applications", subtitle: "Keep track of the forms you are working on." },
   "paper-scan": { title: "Scan a paper form", subtitle: "Use your phone camera or gallery to create a filled copy of a paper form." },
-  extension: { title: "Browser extension", subtitle: "Install FormSaathi in Chrome and connect it to your reviewed profile." },
+  extension: { title: "Browser extension", subtitle: "Install Saral Form in Chrome and connect it to your reviewed profile." },
   privacy: { title: "Privacy centre", subtitle: "See how your information is stored and control your data." }
 };
 
@@ -117,7 +117,7 @@ function App() {
   if (!isSupabaseConfigured || !supabase) return <SetupScreen />;
   const authClient = supabase;
   if (booting) {
-    return <div className="loading-screen"><div className="brand-mark">F</div><span>Opening your workspace…</span></div>;
+    return <div className="loading-screen"><div className="brand-mark">S</div><span>Opening your workspace…</span></div>;
   }
   if (!session) return <AuthScreen />;
   return <Workspace user={session.user} onSignOut={() => void authClient.auth.signOut()} />;
@@ -200,11 +200,11 @@ function AuthScreen() {
             <small>ORGANISE · REVIEW · COMPLETE</small>
           </div>
         </div>
-        <div className="brand-lockup"><div className="brand-mark">F</div><span>FormSaathi</span></div>
+        <div className="brand-lockup"><div className="brand-mark">S</div><span>Saral Form</span></div>
         <div className="story-copy">
           <p className="eyebrow light">Your documents. Your forms. One clear flow.</p>
           <h1>Paperwork, without the maze.</h1>
-          <p>Keep documents organised, review extracted details and complete supported forms with control. FormSaathi helps with the busywork, while every important decision stays yours.</p>
+          <p>Keep documents organised, review extracted details and complete supported forms with control. Saral Form helps with the busywork, while every important decision stays yours.</p>
           <div className="story-points">
             <div><span className="point-check">✓</span><span>Your documents stay under your account.</span></div>
             <div><span className="point-check">✓</span><span>Review extracted details before saving.</span></div>
@@ -216,7 +216,7 @@ function AuthScreen() {
       <section className="auth-panel">
         <div className="auth-card">
           <p className="eyebrow">{mode === "signup" ? "Create an account" : "Welcome back"}</p>
-          <h2>{mode === "signup" ? "Create your account" : "Sign in to FormSaathi"}</h2>
+          <h2>{mode === "signup" ? "Create your account" : "Sign in to Saral Form"}</h2>
           <p className="muted">{mode === "signup" ? "Your personal workspace starts here." : "Pick up where you left off."}</p>
           <form onSubmit={submit} className="auth-form">
             {mode === "signup" && (
@@ -229,7 +229,7 @@ function AuthScreen() {
             <button className="button primary full" type="submit" disabled={busy}>{busy ? "Please wait…" : mode === "signup" ? "Create account" : "Sign in"} <span>→</span></button>
           </form>
           <p className="auth-switch">
-            {mode === "signup" ? "Already have an account?" : "New to FormSaathi?"}
+            {mode === "signup" ? "Already have an account?" : "New to Saral Form?"}
             <button onClick={() => { setMode(mode === "signup" ? "signin" : "signup"); setNotice(""); setError(""); }}>
               {mode === "signup" ? "Sign in" : "Create an account"}
             </button>
@@ -356,7 +356,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         status: "uploaded",
         created_at: new Date().toISOString()
       };
-      setMessage(file.name + " uploaded. FormSaathi will now ask permission to extract its labelled fields.");
+      setMessage(file.name + " uploaded. Saral Form will now ask permission to extract its labelled fields.");
       await refreshData();
       await runOcr(uploadedDocument);
     } catch (reason) {
@@ -396,7 +396,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
 
   async function runOcr(document: UserDocument) {
     const consent = window.confirm(
-      "FormSaathi will send this document to its hosted OCR processor. Its extracted text may then be sent to Google Gemini for broad field detection, including personal or sensitive information. The detected values will remain pending until you choose which ones to save. Continue?"
+      "Saral Form will send this document to its hosted OCR processor. Its extracted text may then be sent to Google Gemini for broad field detection, including personal or sensitive information. The detected values will remain pending until you choose which ones to save. Continue?"
     );
     if (!consent) return;
     clearNotice();
@@ -714,7 +714,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
       ]);
       const failure = operations.find((result) => result.error)?.error;
       if (failure) throw failure;
-      setMessage("Your FormSaathi documents, extracted values and application entries have been cleared. Your login remains active.");
+      setMessage("Your Saral Form documents, extracted values and application entries have been cleared. Your login remains active.");
       await refreshData();
     } catch (reason) {
       setError(messageFor(reason));
@@ -736,7 +736,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
   return (
     <div className="workspace">
       <aside className="sidebar">
-        <div className="brand-lockup"><div className="brand-mark">F</div><span>FormSaathi</span></div>
+        <div className="brand-lockup"><div className="brand-mark">S</div><span>Saral Form</span></div>
         <div className="workspace-label">WORKSPACE</div>
         <nav className="side-nav" aria-label="Main navigation">
           {nav.map((item) => (
@@ -837,7 +837,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
               )}
             </>
           )}
-          <footer className="page-footer"><span>FormSaathi · MVP preview</span><span>Review every value. Submit forms yourself.</span></footer>
+          <footer className="page-footer"><span>Saral Form · MVP preview</span><span>Review every value. Submit forms yourself.</span></footer>
         </div>
       </main>
     </div>
@@ -954,11 +954,11 @@ function DocumentsPage({
   return (
     <div className="page-content">
       <section className="surface-card upload-card">
-        <div className="upload-main"><div className="upload-copy"><div className="upload-symbol">＋</div><div><h3>Add a document</h3><p>PDF, JPG, PNG or WebP · Up to 10 MB. Any document category can be processed.</p></div></div><label className="cloud-consent"><input type="checkbox" checked={cloudConsent} onChange={(event) => onCloudConsentChange(event.target.checked)} /><span>I understand this uploads a copy to my private FormSaathi cloud vault. I will use synthetic documents for this MVP demo.</span></label></div>
+        <div className="upload-main"><div className="upload-copy"><div className="upload-symbol">＋</div><div><h3>Add a document</h3><p>PDF, JPG, PNG or WebP · Up to 10 MB. Any document category can be processed.</p></div></div><label className="cloud-consent"><input type="checkbox" checked={cloudConsent} onChange={(event) => onCloudConsentChange(event.target.checked)} /><span>I understand this uploads a copy to my private Saral Form cloud vault. I will use synthetic documents for this MVP demo.</span></label></div>
         <div className="upload-controls"><label className="category-picker"><span>Vault category (for organisation only)</span><select value={category} onChange={(event) => onCategoryChange(event.target.value as DocumentCategory)}>{categoryOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label><label className={!cloudConsent || busy ? "button primary disabled" : "button primary"}>Choose file<input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" onChange={onUpload} disabled={!cloudConsent || busy} hidden /></label></div>
       </section>
       <div className="section-head document-list-head"><div><p className="eyebrow">Your private storage</p><h3>Uploaded documents <span className="inline-count">{documents.length}</span></h3></div><span className="vault-label">⌑ Private vault</span></div>
-      {documents.length === 0 ? <section className="surface-card empty-large"><div className="empty-illustration">▤</div><h3>No documents yet</h3><p>Upload any supported document. FormSaathi detects its type and extracts labelled fields regardless of the selected vault category.</p></section> : (
+      {documents.length === 0 ? <section className="surface-card empty-large"><div className="empty-illustration">▤</div><h3>No documents yet</h3><p>Upload any supported document. Saral Form detects its type and extracts labelled fields regardless of the selected vault category.</p></section> : (
         <div className="document-table surface-card">
           <div className="table-heading"><span>Document</span><span>Category</span><span>Added</span><span>Status</span><span>Actions</span></div>
           {documents.map((document) => (
@@ -972,7 +972,7 @@ function DocumentsPage({
           ))}
         </div>
       )}
-      <p className="inline-note"><span>ⓘ</span> Uploading stores the original file in your private vault. When you click Run OCR, FormSaathi asks separately before sending the file to its hosted OCR processor and using Gemini to detect labelled fields. Extracted candidates are linked to this document and are not available to the extension until you select and approve them.</p>
+      <p className="inline-note"><span>ⓘ</span> Uploading stores the original file in your private vault. When you click Run OCR, Saral Form asks separately before sending the file to its hosted OCR processor and using Gemini to detect labelled fields. Extracted candidates are linked to this document and are not available to the extension until you select and approve them.</p>
     </div>
   );
 }
@@ -1214,7 +1214,7 @@ function ApplicationsPage({ applications, title, url, onTitleChange, onUrlChange
           </article>
         ))}</div>
       )}
-      <p className="inline-note"><span>ⓘ</span> This tracker is a personal note. FormSaathi does not verify application status with government portals.</p>
+      <p className="inline-note"><span>ⓘ</span> This tracker is a personal note. Saral Form does not verify application status with government portals.</p>
     </div>
   );
 }
@@ -1394,7 +1394,7 @@ function PaperFormPage({ verifiedFacts }: { verifiedFacts: ProfileFact[] }) {
         note?: string;
         error?: string;
       };
-      if (!response.ok) throw new Error(payload.error || "FormSaathi could not analyse this paper form.");
+      if (!response.ok) throw new Error(payload.error || "Saral Form could not analyse this paper form.");
       if (!payload.image) throw new Error("The backend did not return the oriented source image.");
       const detectedPlacements = Array.isArray(payload.placements) ? payload.placements : [];
       if (detectedPlacements.length === 0) {
@@ -1467,7 +1467,7 @@ function PaperFormPage({ verifiedFacts }: { verifiedFacts: ProfileFact[] }) {
         <div>
           <p className="eyebrow">Paper form assistant</p>
           <h3>Photograph a paper form. Review it. Download a filled copy.</h3>
-          <p>FormSaathi reads printed labels, matches only your approved profile values and suggests safe writing areas. You edit and approve every placement before the final copy is created.</p>
+          <p>Saral Form reads printed labels, matches only your approved profile values and suggests safe writing areas. You edit and approve every placement before the final copy is created.</p>
           <div className="paper-profile-count">{verifiedFacts.length} reviewed profile value(s) available</div>
         </div>
       </section>
@@ -1513,7 +1513,7 @@ function PaperFormPage({ verifiedFacts }: { verifiedFacts: ProfileFact[] }) {
           )}
           <label className="paper-consent">
             <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-            <span>I agree to send this photo and relevant approved profile values to Google Gemini through FormSaathi for form analysis. The processing route uses OCR and Gemini vision; it does not save the photo to my document vault.</span>
+            <span>I agree to send this photo and relevant approved profile values to Google Gemini through Saral Form for form analysis. The processing route uses OCR and Gemini vision; it does not save the photo to my document vault.</span>
           </label>
           <button className="button primary paper-scan-button" disabled={!file || !consent || busy || verifiedFacts.length === 0} onClick={() => void scanAndFill()}>
             {busy ? "Scanning and locating writing areas…" : "Scan this paper form →"}
@@ -1572,7 +1572,7 @@ function PaperFormPage({ verifiedFacts }: { verifiedFacts: ProfileFact[] }) {
           <div className="paper-stop-mark">STOP</div>
           <p className="eyebrow">Step 4 · Human approval required</p>
           <h3>Check everything before creating the final copy.</h3>
-          <p>Review the image and the {includedCount} selected value(s). FormSaathi will not create the downloadable copy until you approve. It will never submit this form to a government portal.</p>
+          <p>Review the image and the {includedCount} selected value(s). Saral Form will not create the downloadable copy until you approve. It will never submit this form to a government portal.</p>
           {previewUrl && <img className="paper-result-image" src={previewUrl} alt="Final review before approval" />}
           <div className="paper-stop-actions">
             <button type="button" className="button paper-gallery" onClick={() => { setError(""); setStage("review"); }}>← Go back and fix</button>
@@ -1597,7 +1597,7 @@ function PaperFormPage({ verifiedFacts }: { verifiedFacts: ProfileFact[] }) {
         </section>
       )}
 
-      <div className="security-callout"><strong>Important:</strong> The final copy is an image, not an official digitally submitted form. Text placement can be imperfect. FormSaathi does not add signatures, certify documents, pay fees or submit applications. The human approval step is mandatory.</div>
+      <div className="security-callout"><strong>Important:</strong> The final copy is an image, not an official digitally submitted form. Text placement can be imperfect. Saral Form does not add signatures, certify documents, pay fees or submit applications. The human approval step is mandatory.</div>
     </div>
   );
 }
@@ -1611,15 +1611,15 @@ function PrivacyPage({ userEmail, documentCount, factCount, onClear, busy }: {
 }) {
   return (
     <div className="page-content">
-      <section className="privacy-hero"><div className="privacy-symbol">⌑</div><div><p className="eyebrow light">Your data, your call</p><h2>Privacy should be part of the product.</h2><p>FormSaathi is designed to process only what you choose and keep you in control of every suggested value.</p></div></section>
+      <section className="privacy-hero"><div className="privacy-symbol">⌑</div><div><p className="eyebrow light">Your data, your call</p><h2>Privacy should be part of the product.</h2><p>Saral Form is designed to process only what you choose and keep you in control of every suggested value.</p></div></section>
       <div className="privacy-grid">
         <section className="surface-card privacy-card"><div className="privacy-card-icon">▣</div><h3>Private document storage</h3><p>Files are stored in a non-public Supabase Storage bucket. Row-level security policies restrict access to the authenticated owner.</p><span className="privacy-status">Configured in database migration</span></section>
         <section className="surface-card privacy-card"><div className="privacy-card-icon">⌁</div><h3>On-demand OCR</h3><p>Uploading a document does not automatically run OCR. When you choose Run OCR, that file is sent over HTTPS to our hosted OCR processor for in-memory processing. Candidate values need your approval.</p><span className="privacy-status">User initiated</span></section>
         <section className="surface-card privacy-card"><div className="privacy-card-icon">◈</div><h3>Limited profile data</h3><p>The extension and paper-form scanner use only approved profile facts relevant to the current task, not the entire document vault.</p><span className="privacy-status">Reviewed profile facts only</span></section>
-        <section className="surface-card privacy-card"><div className="privacy-card-icon">▧</div><h3>Paper-form photo scan</h3><p>The selected photo is sent to the FormSaathi backend and Google Gemini after your consent. The processing route does not save the photo to your document vault.</p><span className="privacy-status">User initiated · in-memory API processing</span></section>
+        <section className="surface-card privacy-card"><div className="privacy-card-icon">▧</div><h3>Paper-form photo scan</h3><p>The selected photo is sent to the Saral Form backend and Google Gemini after your consent. The processing route does not save the photo to your document vault.</p><span className="privacy-status">User initiated · in-memory API processing</span></section>
         <section className="surface-card privacy-card"><div className="privacy-card-icon">↺</div><h3>Delete your data</h3><p>Remove uploaded files, extracted candidates, reviewed profile values and application tracker entries while keeping your login account.</p><span className="privacy-status">{documentCount} documents · {factCount} reviewed fields</span></section>
       </div>
-      <section className="surface-card data-controls"><div><p className="eyebrow">Account data</p><h3>{userEmail}</h3><p>Clear your FormSaathi content from the active database and private storage. This does not delete your Supabase login account or copies retained in backups according to your provider's retention settings.</p></div><button className="button danger-button" onClick={onClear} disabled={busy}>{busy ? "Clearing…" : "Delete my FormSaathi data"}</button></section>
+      <section className="surface-card data-controls"><div><p className="eyebrow">Account data</p><h3>{userEmail}</h3><p>Clear your Saral Form content from the active database and private storage. This does not delete your Supabase login account or copies retained in backups according to your provider's retention settings.</p></div><button className="button danger-button" onClick={onClear} disabled={busy}>{busy ? "Clearing…" : "Delete my Saral Form data"}</button></section>
       <div className="security-callout"><strong>Prototype warning:</strong> this is an MVP foundation, not an independently audited production vault. Use synthetic documents in demos until the hosted project, access policies, backup retention and security controls have been reviewed.</div>
     </div>
   );
@@ -1636,7 +1636,7 @@ function EmptyState({ title, text }: { title: string; text: string }) {
 export default App;
 
 
-const extensionPackageUrl = "https://github.com/atharv-shrivastava/formsaathi/releases/download/extension-v0.1.0/FormSaathi-Chrome-Extension.zip";
+const extensionPackageUrl = "https://github.com/atharv-shrivastava/formsaathi/releases/download/extension-v0.1.0/Saral Form-Chrome-Extension.zip";
 
 function ExtensionPage({ userEmail, verifiedFactCount }: { userEmail: string; verifiedFactCount: number }) {
   return (
@@ -1644,9 +1644,9 @@ function ExtensionPage({ userEmail, verifiedFactCount }: { userEmail: string; ve
       <section className="surface-card extension-hero">
         <div className="extension-mark">FS</div>
         <div className="extension-hero-copy">
-          <p className="eyebrow">FormSaathi for Chrome</p>
+          <p className="eyebrow">Saral Form for Chrome</p>
           <h2>Take your reviewed profile to the form.</h2>
-          <p>FormSaathi can read the fields on the active page, match them against your approved information profile and let you review each suggested value before filling.</p>
+          <p>Saral Form can read the fields on the active page, match them against your approved information profile and let you review each suggested value before filling.</p>
           <a className="button primary extension-download" href={extensionPackageUrl}>Download Chrome extension <span>↓</span></a>
           <a className="text-button extension-release-link" href="https://github.com/atharv-shrivastava/formsaathi/releases" target="_blank" rel="noreferrer">View release notes ↗</a>
         </div>
@@ -1659,12 +1659,12 @@ function ExtensionPage({ userEmail, verifiedFactCount }: { userEmail: string; ve
           <li><strong>Open Chrome extensions</strong><span>Enter <code>chrome://extensions</code> in the browser address bar.</span></li>
           <li><strong>Enable Developer mode</strong><span>Turn on Developer mode using the switch near the top-right corner.</span></li>
           <li><strong>Load the extension</strong><span>Click Load unpacked and select the extracted folder that contains <code>manifest.json</code>.</span></li>
-          <li><strong>Open FormSaathi</strong><span>Pin the extension if desired, then open its side panel from the Chrome toolbar.</span></li>
+          <li><strong>Open Saral Form</strong><span>Pin the extension if desired, then open its side panel from the Chrome toolbar.</span></li>
         </ol>
       </section>
 
       <section className="surface-card extension-connect-card">
-        <p className="eyebrow">Your FormSaathi account</p>
+        <p className="eyebrow">Your Saral Form account</p>
         <h3>Connect using the same account</h3>
         <p>Sign in inside the extension with the same email address and password you use on this website. The extension keeps its own protected browser-extension session; it does not copy credentials from the website.</p>
         <div className="extension-account-summary"><div><span>Website account</span><strong>{userEmail}</strong></div><div><span>Reviewed profile fields</span><strong>{verifiedFactCount}</strong></div></div>
