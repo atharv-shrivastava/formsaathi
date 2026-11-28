@@ -1607,7 +1607,7 @@ body {
   -webkit-backdrop-filter: blur(18px) saturate(155%);
   backdrop-filter: blur(18px) saturate(155%);
   cursor: pointer;
-  font: 700 11px/1 inherit;
+  font-family: inherit;\n  font-size: 11px;\n  font-weight: 700;\n  line-height: 1;
   transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
 }
 .app-language-trigger:hover {
@@ -1665,7 +1665,7 @@ body {
   color: #344a39;
   background: transparent;
   cursor: pointer;
-  font: 700 12px/1 inherit;
+  font-family: inherit;\n  font-size: 12px;\n  font-weight: 700;\n  line-height: 1;
   text-align: left;
 }
 .app-language-menu > button:hover,
