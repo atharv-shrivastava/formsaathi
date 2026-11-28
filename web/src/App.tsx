@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ChangeEvent, FormEvent, PointerEvent as ReactPointerEvent } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { isSupabaseConfigured, ocrApiUrl, supabase } from "./lib/supabase";
 import type {
@@ -263,38 +263,6 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
   const [cloudConsent, setCloudConsent] = useState(false);
   const [applicationTitle, setApplicationTitle] = useState("");
   const [applicationUrl, setApplicationUrl] = useState("");
-
-  const depthCardRef = useRef<HTMLElement | null>(null);
-
-  function resetDepthCard() {
-    if (!depthCardRef.current) return;
-    depthCardRef.current.style.removeProperty("--depth-rotate-x");
-    depthCardRef.current.style.removeProperty("--depth-rotate-y");
-    depthCardRef.current = null;
-  }
-
-  function handleWorkspacePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
-    if (event.pointerType !== "mouse" && event.pointerType !== "pen") return;
-    const target = event.target;
-    if (!(target instanceof Element)) {
-      resetDepthCard();
-      return;
-    }
-
-    const card = target.closest<HTMLElement>(
-      ".stat-card, .surface-card, .next-step-card, .fact-card, .application-row, .candidate-document-group, .paper-placement-row"
-    );
-    if (depthCardRef.current && depthCardRef.current !== card) resetDepthCard();
-    if (!card) return;
-
-    const bounds = card.getBoundingClientRect();
-    if (!bounds.width || !bounds.height) return;
-    const x = (event.clientX - bounds.left) / bounds.width;
-    const y = (event.clientY - bounds.top) / bounds.height;
-    card.style.setProperty("--depth-rotate-x", ((0.5 - y) * 5.5).toFixed(2) + "deg");
-    card.style.setProperty("--depth-rotate-y", ((x - 0.5) * 6.5).toFixed(2) + "deg");
-    depthCardRef.current = card;
-  }
 
   const refreshData = useCallback(async () => {
     setLoading(true);
@@ -767,7 +735,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
   ], []);
 
   return (
-    <div className="workspace" onPointerMove={handleWorkspacePointerMove} onPointerLeave={resetDepthCard}>
+    <div className="workspace">
       <WorkspaceNavigation
         items={nav}
         selectedId={page}
