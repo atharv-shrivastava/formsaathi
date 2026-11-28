@@ -44,6 +44,17 @@ const pageTitles: Record<Page, { title: string; subtitle: string }> = {
   privacy: { title: "Privacy centre", subtitle: "See how your information is stored and control your data." }
 };
 
+const documentSpecificFactKeys = new Set([
+  "aadhaar_number", "pan_number", "certificate_number", "document_number",
+  "roll_number", "registration_number", "enrolment_number", "issue_date",
+  "expiry_date", "passing_year", "percentage", "cgpa", "sgpa",
+  "marks_obtained", "total_marks", "board_name", "school_name"
+]);
+
+function belongsInGeneralProfile(key: string): boolean {
+  return !documentSpecificFactKeys.has(key);
+}
+
 function formatBytes(bytes: number) {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + " KB";
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
@@ -459,10 +470,11 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
   }
 
   async function approveFact(fact: ExtractedFact) {
-    const current = profileFacts.find((item) => item.fact_key === fact.fact_key);
+    const saveToGeneralProfile = belongsInGeneralProfile(fact.fact_key);
+    const current = saveToGeneralProfile ? profileFacts.find((item) => item.fact_key === fact.fact_key) : undefined;
     if (current && current.fact_value !== fact.fact_value) {
       const confirmed = window.confirm(
-        "Your profile currently stores \"" + current.fact_value + "\" for " + displayFactKey(fact.fact_key) +
+        "Your general profile currently stores \"" + current.fact_value + "\" for " + displayFactKey(fact.fact_key) +
         ". Replace it with \"" + fact.fact_value + "\" from this document?"
       );
       if (!confirmed) return;
@@ -470,19 +482,23 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
     clearNotice();
     setBusy(true);
     try {
-      const { error: saveError } = await client.from("profile_facts").upsert({
-        user_id: user.id,
-        fact_key: fact.fact_key,
-        fact_label: fact.fact_label || displayFactKey(fact.fact_key),
-        fact_value: fact.fact_value,
-        source_document_id: fact.document_id,
-        confidence: fact.confidence,
-        verified: true
-      }, { onConflict: "user_id,fact_key" });
-      if (saveError) throw saveError;
+      if (saveToGeneralProfile) {
+        const { error: saveError } = await client.from("profile_facts").upsert({
+          user_id: user.id,
+          fact_key: fact.fact_key,
+          fact_label: fact.fact_label || displayFactKey(fact.fact_key),
+          fact_value: fact.fact_value,
+          source_document_id: fact.document_id,
+          confidence: fact.confidence,
+          verified: true
+        }, { onConflict: "user_id,fact_key" });
+        if (saveError) throw saveError;
+      }
       const { error: reviewError } = await client.from("extracted_facts").update({ review_status: "approved" }).eq("id", fact.id);
       if (reviewError) throw reviewError;
-      setMessage("Saved " + displayFactKey(fact.fact_key) + " to your reviewed profile.");
+      setMessage(saveToGeneralProfile
+        ? "Approved and saved " + displayFactKey(fact.fact_key) + " to your general profile."
+        : "Approved " + displayFactKey(fact.fact_key) + " as document-specific information. It stays attached to this document.");
       await refreshData();
     } catch (reason) {
       setError(messageFor(reason));
@@ -526,17 +542,20 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
     clearNotice();
     setBusy(true);
     try {
-      const profileRows = Array.from(uniqueByKey.values()).map((fact) => ({
-        user_id: user.id,
-        fact_key: fact.fact_key,
-        fact_label: fact.fact_label || displayFactKey(fact.fact_key),
-        fact_value: fact.fact_value,
-        source_document_id: fact.document_id,
-        confidence: fact.confidence,
-        verified: true
-      }));
-      const { error: saveError } = await client.from("profile_facts").upsert(profileRows, { onConflict: "user_id,fact_key" });
-      if (saveError) throw saveError;
+      const generalFacts = Array.from(uniqueByKey.values()).filter((fact) => belongsInGeneralProfile(fact.fact_key));
+      if (generalFacts.length) {
+        const profileRows = generalFacts.map((fact) => ({
+          user_id: user.id,
+          fact_key: fact.fact_key,
+          fact_label: fact.fact_label || displayFactKey(fact.fact_key),
+          fact_value: fact.fact_value,
+          source_document_id: fact.document_id,
+          confidence: fact.confidence,
+          verified: true
+        }));
+        const { error: saveError } = await client.from("profile_facts").upsert(profileRows, { onConflict: "user_id,fact_key" });
+        if (saveError) throw saveError;
+      }
 
       const selectedIds = selectedFacts.map((fact) => fact.id);
       const { error: reviewError } = await client
@@ -548,7 +567,8 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         throw new Error("Profile values were saved, but their review status could not be updated. Refresh and check the profile before retrying.");
       }
 
-      setMessage("Saved " + uniqueByKey.size + " selected value(s) to your reviewed profile. The extension can now search these saved facts without re-reading the documents.");
+      const documentOnlyCount = uniqueByKey.size - generalFacts.length;
+      setMessage("Approved " + uniqueByKey.size + " selected value(s): " + generalFacts.length + " added to general profile and " + documentOnlyCount + " kept with their source documents.");
       await refreshData();
     } catch (reason) {
       setError(messageFor(reason));
