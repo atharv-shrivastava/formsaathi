@@ -127,7 +127,7 @@ function SetupScreen() {
   return (
     <main className="setup-screen">
       <div className="setup-card">
-        <div className="brand-mark large">F</div>
+        <div className="brand-mark large">S</div>
         <p className="eyebrow">First-time setup</p>
         <h1>Connect your Supabase project.</h1>
         <p className="muted">The web app is ready, but it needs your project URL and publishable key before accounts and private storage can work.</p>
@@ -1636,7 +1636,7 @@ function EmptyState({ title, text }: { title: string; text: string }) {
 export default App;
 
 
-const extensionPackageUrl = "https://github.com/atharv-shrivastava/formsaathi/releases/download/extension-v0.1.0/Saral Form-Chrome-Extension.zip";
+const extensionPackageUrl = "https://github.com/atharv-shrivastava/formsaathi/releases/download/extension-v0.1.0/FormSaathi-Chrome-Extension.zip";
 
 function ExtensionPage({ userEmail, verifiedFactCount }: { userEmail: string; verifiedFactCount: number }) {
   return (
