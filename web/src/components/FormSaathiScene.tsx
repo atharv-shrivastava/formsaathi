@@ -90,10 +90,6 @@ export default function FormSaathiScene({ label }: FormSaathiSceneProps) {
           roughness: 0.5,
           metalness: 0.16,
         });
-        const white = new THREE.MeshStandardMaterial({
-          color: 0xffffff,
-          roughness: 0.7,
-        });
 
         const addBox = (
           parent: THREE.Object3D,
