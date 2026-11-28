@@ -64,6 +64,7 @@ export default function App() {
   const [maxWidth, setMaxWidth] = useState(300);
   const [maxHeight, setMaxHeight] = useState(300);
   const [preparingId, setPreparingId] = useState<string | null>(null);
+  const [reprocessingId, setReprocessingId] = useState<string | null>(null);
 
   const reloadDocuments = async () => setDocuments(await listDocuments());
 
@@ -179,6 +180,52 @@ export default function App() {
       setStatus(error instanceof Error ? error.message : "Could not prepare this image.");
     } finally {
       setPreparingId(null);
+    }
+  }
+
+
+  async function rerunDocumentOcr(document: StoredDocument) {
+    if (!account) {
+      setStatus("Connect your Saral Form account before running document OCR.");
+      return;
+    }
+    if (!apiReady) {
+      setStatus("The hosted Saral Form OCR service is unavailable. Check your connection and retry.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Saral Form will send " + document.name +
+      " from this browser's local vault to the hosted OCR processor again. The previous local OCR cache will be replaced only after the new request succeeds. Continue?"
+    );
+    if (!confirmed) return;
+
+    setReprocessingId(document.id);
+    setStatus("Re-running OCR for " + document.name + "…");
+    try {
+      const session = await getExtensionSession();
+      if (!session) throw new Error("Your Saral Form session expired. Connect your account again.");
+      const extracted = await extractDocument(document, session.access_token);
+      await saveDocument({
+        ...document,
+        cachedText: extracted.text,
+        cachedFacts: extracted.facts,
+        cachedAt: Date.now()
+      });
+      await reloadDocuments();
+      setStatus(
+        "OCR re-run completed for " + document.name + ". " +
+        extracted.facts.length + " candidate value(s) were detected. " +
+        "The refreshed values will be available during the next relevant form scan."
+      );
+    } catch (error) {
+      setStatus(
+        "Could not re-run OCR for " + document.name + ": " +
+        (error instanceof Error ? error.message : "Please retry.") +
+        " The previous OCR cache was kept."
+      );
+    } finally {
+      setReprocessingId(null);
     }
   }
 
@@ -589,6 +636,16 @@ export default function App() {
                     {categories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                   </select>
                   <small>{document.cachedAt ? "OCR cached locally" : "Not processed"}</small>
+                  <button
+                    type="button"
+                    className="text-button prepare-button"
+                    disabled={!apiReady || !account || reprocessingId === document.id}
+                    onClick={() => void rerunDocumentOcr(document)}
+                  >
+                    {reprocessingId === document.id
+                      ? "Re-running OCR…"
+                      : document.cachedAt ? "Re-run OCR" : "Run OCR now"}
+                  </button>
                   {document.mimeType.startsWith("image/") && (
                     <button className="text-button prepare-button" disabled={!apiReady || preparingId === document.id} onClick={() => void prepareDocumentImage(document)}>
                       {preparingId === document.id ? "Preparing…" : "Prepare JPEG copy"}
