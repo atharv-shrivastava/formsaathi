@@ -5,9 +5,9 @@ import multer from "multer";
 import { createClient } from "@supabase/supabase-js";
 import sharp from "sharp";
 import { processDocument } from "./ocr.js";
-import { buildDocumentExtractionPrompt, mergeDocumentFacts, validateDocumentExtraction } from "./document-extraction.js";
+import { buildDocumentExtractionPrompt, mergeDocumentFacts, splitDocumentTextIntoChunks, validateDocumentExtraction } from "./document-extraction.js";
 import { prepareImage } from "./prepare.js";
-import { filterRelevantProfileFacts, retrieveProfileFactsForFields, sanitizeDetectedFields, validateAiMappings } from "./form-analysis.js";
+import { filterRelevantProfileFacts, retrieveApprovedFactsForFields, sanitizeDetectedFields, validateAiMappings } from "./form-analysis.js";
 import { buildPaperFormFields, validatePaperPlacements } from "./paper-form.js";
 
 const app = express();
@@ -208,55 +208,84 @@ app.post(
       let documentType = null;
       let facts = result.facts || [];
       let aiExtractionUsed = false;
+      let extractionComplete = false;
       let extractionNote = "Only pattern-based fields were detected. Review the original document for additional information.";
+      let processedChunks = 0;
+      const chunks = splitDocumentTextIntoChunks(result.text);
 
       const apiKey = process.env.GEMINI_API_KEY;
-      if (apiKey && result.text.trim()) {
-        try {
-          const parsed = await callGeminiJson({
-            apiKey,
-            model: getGeminiModel(),
-            contents: [{
-              role: "user",
-              parts: [{ text: buildDocumentExtractionPrompt(result.text) }]
-            }],
-            responseSchema: {
-              type: "OBJECT",
-              properties: {
-                documentType: { type: "STRING" },
-                facts: {
-                  type: "ARRAY",
-                  items: {
-                    type: "OBJECT",
-                    properties: {
-                      key: { type: "STRING" },
-                      label: { type: "STRING" },
-                      value: { type: "STRING" },
-                      confidence: { type: "NUMBER" },
-                      evidence: { type: "STRING" }
-                    },
-                    required: ["key", "label", "value", "confidence", "evidence"]
+      if (apiKey && chunks.length) {
+        const extractedFacts = [];
+        const failedSegments = [];
+        for (let chunkIndex = 0; chunkIndex < chunks.length; chunkIndex += 1) {
+          try {
+            const parsed = await callGeminiJson({
+              apiKey,
+              model: getGeminiModel(),
+              contents: [{
+                role: "user",
+                parts: [{
+                  text: buildDocumentExtractionPrompt(chunks[chunkIndex], {
+                    index: chunkIndex,
+                    total: chunks.length
+                  })
+                }]
+              }],
+              responseSchema: {
+                type: "OBJECT",
+                properties: {
+                  documentType: { type: "STRING" },
+                  facts: {
+                    type: "ARRAY",
+                    items: {
+                      type: "OBJECT",
+                      properties: {
+                        key: { type: "STRING" },
+                        label: { type: "STRING" },
+                        value: { type: "STRING" },
+                        confidence: { type: "NUMBER" },
+                        evidence: { type: "STRING" }
+                      },
+                      required: ["key", "label", "value", "confidence", "evidence"]
+                    }
                   }
-                }
+                },
+                required: ["documentType", "facts"]
               },
-              required: ["documentType", "facts"]
-            },
-            maxOutputTokens: 8192
-          });
-          const validated = validateDocumentExtraction(parsed, result.text);
-          documentType = validated.documentType;
-          facts = mergeDocumentFacts(validated.facts, result.facts);
+              maxOutputTokens: 8192
+            });
+            const validated = validateDocumentExtraction(parsed, chunks[chunkIndex]);
+            if (!documentType && validated.documentType !== "Unknown document") {
+              documentType = validated.documentType;
+            }
+            extractedFacts.push(...validated.facts);
+            processedChunks += 1;
+          } catch (extractionError) {
+            failedSegments.push(chunkIndex + 1);
+            console.warn(
+              "Gemini document extraction failed for OCR segment " + (chunkIndex + 1) + ":",
+              extractionError instanceof Error ? extractionError.message : extractionError
+            );
+          }
+        }
+
+        if (processedChunks > 0) {
+          facts = mergeDocumentFacts(extractedFacts, result.facts);
           aiExtractionUsed = true;
-          extractionNote = "AI extracted labelled fields across this document. Every candidate is unverified until you select and approve it.";
-        } catch (extractionError) {
-          console.warn(
-            "Gemini document extraction failed; using conservative OCR patterns:",
-            extractionError instanceof Error ? extractionError.message : extractionError
-          );
-          extractionNote = "AI field extraction was unavailable, so only a limited set of pattern-matched fields was detected. Retry later or review the document manually.";
+          extractionComplete = failedSegments.length === 0;
+          extractionNote = extractionComplete
+            ? "AI reviewed all " + chunks.length + " OCR text segments and extracted labelled fields. Every value remains pending until you review it."
+            : "AI extraction was partial: " + processedChunks + " of " + chunks.length + " text segments completed. Some information may be missing. Retry extraction before relying on this document.";
+        } else {
+          facts = mergeDocumentFacts([], result.facts);
+          extractionNote = "AI could not process the OCR text. Only a limited set of pattern-matched fields was detected. Retry extraction before relying on this document.";
         }
       } else if (!apiKey) {
+        facts = mergeDocumentFacts([], result.facts);
         extractionNote = "Gemini is not configured on the backend. Only a limited set of pattern-matched fields was detected.";
+      } else {
+        facts = mergeDocumentFacts([], result.facts);
+        extractionNote = "No readable OCR text was available for AI extraction. Review the original document and retry with a clearer scan.";
       }
 
       response.json({
@@ -264,6 +293,9 @@ app.post(
         facts,
         documentType,
         aiExtractionUsed,
+        extractionComplete,
+        processedChunks,
+        totalChunks: chunks.length,
         note: extractionNote
       });
     } catch (error) {
