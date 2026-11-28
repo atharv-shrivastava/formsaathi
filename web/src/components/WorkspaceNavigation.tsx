@@ -40,6 +40,10 @@ export default function WorkspaceNavigation({
   const meshMapRef = useRef(new Map<string, NavigationMesh>());
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [webglFailed, setWebglFailed] = useState(false);
+  const selectedIdRef = useRef(selectedId);
+  const hoveredIdRef = useRef(hoveredId);
+  selectedIdRef.current = selectedId;
+  hoveredIdRef.current = hoveredId;
 
   useEffect(() => {
     const host = canvasHostRef.current;
@@ -48,6 +52,7 @@ export default function WorkspaceNavigation({
     let disposed = false;
     let frame = 0;
     let observer: ResizeObserver | undefined;
+    let removeHostListeners: (() => void) | undefined;
     let renderer: import("three").WebGLRenderer | undefined;
     let scene: import("three").Scene | undefined;
     let navGroup: import("three").Group | undefined;
@@ -216,7 +221,9 @@ export default function WorkspaceNavigation({
           group.add(pin);
 
           object.add(group);
-          meshes.set(item.id, { group, material, accent });
+          const entry = { group, material, accent };
+          meshes.set(item.id, entry);
+          meshMapRef.current.set(item.id, entry);
         });
 
         const halo = new THREE.Mesh(
@@ -262,6 +269,10 @@ export default function WorkspaceNavigation({
         };
         host.addEventListener("pointermove", onPointerMove);
         host.addEventListener("pointerleave", onPointerLeave);
+        removeHostListeners = () => {
+          host.removeEventListener("pointermove", onPointerMove);
+          host.removeEventListener("pointerleave", onPointerLeave);
+        };
         observer = new ResizeObserver(resize);
         observer.observe(host);
         resize();
@@ -274,8 +285,8 @@ export default function WorkspaceNavigation({
             object.rotation.y += (targetY - object.rotation.y) * 0.055;
           }
           meshes.forEach((entry, id) => {
-            const active = id === selectedId;
-            const hovered = id === hoveredId;
+            const active = id === selectedIdRef.current;
+            const hovered = id === hoveredIdRef.current;
             const targetZ = active ? 0.48 : hovered ? 0.27 : 0.05;
             entry.group.position.z += (targetZ - entry.group.position.z) * 0.12;
             entry.group.rotation.y += ((active ? -0.095 : hovered ? -0.045 : 0) - entry.group.rotation.y) * 0.12;
@@ -289,13 +300,9 @@ export default function WorkspaceNavigation({
         };
         animate();
 
-        return () => {
-          host.removeEventListener("pointermove", onPointerMove);
-          host.removeEventListener("pointerleave", onPointerLeave);
-        };
       } catch (error) {
         console.error("3D navigation could not start:", error);
-        setWebglFailed(true);
+        if (!disposed) setWebglFailed(true);
       }
     });
 
@@ -303,24 +310,18 @@ export default function WorkspaceNavigation({
       disposed = true;
       window.cancelAnimationFrame(frame);
       observer?.disconnect();
-      meshes.forEach((entry) => {
-        entry.group.traverse((object) => {
-          const mesh = object as import("three").Mesh;
-          if (mesh.geometry) mesh.geometry.dispose();
-          if (Array.isArray(mesh.material)) mesh.material.forEach((material) => material.dispose());
-          else if (mesh.material) mesh.material.dispose();
-        });
+      removeHostListeners?.();
+      scene?.traverse((object) => {
+        const mesh = object as import("three").Mesh;
+        if (mesh.geometry) mesh.geometry.dispose();
+        if (Array.isArray(mesh.material)) mesh.material.forEach((material) => material.dispose());
+        else if (mesh.material) mesh.material.dispose();
       });
       meshMapRef.current.clear();
       renderer?.dispose();
       if (renderer?.domElement.parentElement === host) host.removeChild(renderer.domElement);
     };
   }, [items]);
-
-  useEffect(() => {
-    // The render loop reads the selected/hovered ids without rebuilding the scene.
-    meshMapRef.current.forEach((_value, id) => void id);
-  }, [selectedId, hoveredId]);
 
   return (
     <aside className="sidebar workspace-sidebar workspace-3d-sidebar">
