@@ -177,3 +177,29 @@ test("does not send passwords or other blocked controls to AI analysis", () => {
 
   assert.deepEqual(sanitized.map((field) => field.id), ["normal"]);
 });
+
+
+test("accepts accessible contenteditable text fields but still rejects unsupported custom controls", () => {
+  const sanitized = sanitizeDetectedFields([
+    { id: "rich-address", label: "Permanent Address", tagName: "div", inputType: "contenteditable", isContentEditable: true },
+    { id: "fake-button", label: "Continue", tagName: "div", inputType: "button", isContentEditable: true },
+    { id: "generic-div", label: "Name", tagName: "div", inputType: "text" }
+  ]);
+  assert.deepEqual(sanitized.map((field) => field.id), ["rich-address"]);
+  assert.equal(sanitized[0].isContentEditable, true);
+});
+
+test("retrieves document identifiers from their document-specific labels", () => {
+  const idFields = [
+    { id: "aadhaar", label: "UIDAI / Aadhaar No.", tagName: "input", inputType: "text" },
+    { id: "pan", label: "Permanent Account Number", tagName: "input", inputType: "text" },
+    { id: "roll", label: "University Roll No.", tagName: "input", inputType: "text" }
+  ];
+  const idFacts = [
+    { id: "a", fact_key: "aadhaar_number", fact_label: "Aadhaar Number", fact_value: "123412341234", sourceType: "document" },
+    { id: "p", fact_key: "pan_number", fact_label: "PAN Card Number", fact_value: "ABCDE1234F", sourceType: "document" },
+    { id: "r", fact_key: "roll_number", fact_label: "Roll Number", fact_value: "RGPV12345", sourceType: "document" }
+  ];
+  const retrieved = retrieveProfileFactsForFields(idFields, idFacts);
+  assert.deepEqual(retrieved.map((item) => item.candidates[0]?.factId), ["a", "p", "r"]);
+});
