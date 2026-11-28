@@ -59,7 +59,8 @@ test("does not infer annual income from an unrelated income-source label", () =>
   assert.equal(canonicalFactKey("Annual Family Income"), "annual_income");
 });
 
-test("does not infer academic marks from attendance percentage", () => {
+test("does not infer academic marks from ambiguous percentage labels", () => {
+  assert.equal(canonicalFactKey("Percentage"), null);
   assert.equal(canonicalFactKey("Attendance Percentage"), null);
   assert.equal(canonicalFactKey("Class 12 Percentage"), "percentage");
 });
