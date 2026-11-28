@@ -84,9 +84,9 @@ export default function App() {
       const connected = await signInExtensionAccount(authEmail, authPassword);
       setAccount(connected);
       setAuthPassword("");
-      setStatus("Connected to your FormSaathi account. Reviewed profile facts are ready for matching.");
+      setStatus("Connected to your Saral Form account. Reviewed profile facts are ready for matching.");
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : "Could not connect your FormSaathi account.");
+      setAuthError(error instanceof Error ? error.message : "Could not connect your Saral Form account.");
     } finally {
       setAuthBusy(false);
     }
@@ -99,7 +99,7 @@ export default function App() {
       await disconnectExtensionAccount();
       setAccount(null);
       setRows([]);
-      setStatus("FormSaathi account disconnected from this extension.");
+      setStatus("Saral Form account disconnected from this extension.");
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Could not disconnect the account.");
     } finally {
@@ -157,14 +157,14 @@ export default function App() {
       return;
     }
     if (!apiReady) {
-      setStatus("The hosted FormSaathi service is unavailable. Check your connection and retry.");
+      setStatus("The hosted Saral Form service is unavailable. Check your connection and retry.");
       return;
     }
     setPreparingId(document.id);
     setStatus("Preparing a JPEG copy. Your original vault document will remain unchanged.");
     try {
       const session = await getExtensionSession();
-      if (!session) throw new Error("Connect your FormSaathi account before preparing an image.");
+      if (!session) throw new Error("Connect your Saral Form account before preparing an image.");
       const result = await requestImagePreparation(document, maxKb, maxWidth, maxHeight, session.access_token);
       const url = URL.createObjectURL(result.blob);
       const anchor = window.document.createElement("a");
@@ -209,7 +209,7 @@ export default function App() {
       }));
       const successfulFrames = frameResults.filter((item): item is NonNullable<typeof item> => Boolean(item));
       if (!successfulFrames.length) {
-        throw new Error("FormSaathi could not reach this page. Reload the tab after installing the extension, then scan again. Browser-internal pages and some protected portals block extensions.");
+        throw new Error("Saral Form could not reach this page. Reload the tab after installing the extension, then scan again. Browser-internal pages and some protected portals block extensions.");
       }
       const nextScan: ScanResult = {
         title: successfulFrames[0]?.result.title || "Web form",
@@ -240,7 +240,7 @@ export default function App() {
             key: fact.fact_key,
             value: fact.fact_value,
             confidence: fact.confidence ?? 0.92,
-            evidence: "Reviewed and approved in your FormSaathi information profile.",
+            evidence: "Reviewed and approved in your Saral Form information profile.",
             sourceId: fact.id,
             sourceName: "General information",
             sourceType: "general"
@@ -266,20 +266,20 @@ export default function App() {
         if (!apiReady) {
           documentOcrMessage = " Hosted document OCR is unavailable; no document was uploaded.";
         } else if (!account) {
-          documentOcrMessage = " Connect your FormSaathi account to process selected browser-local documents.";
+          documentOcrMessage = " Connect your Saral Form account to process selected browser-local documents.";
         } else {
           const cachedCount = relevantDocuments.filter((document) => Boolean(document.cachedAt)).length;
           const uploadCount = relevantDocuments.length - cachedCount;
           const approvedUpload = uploadCount === 0 || window.confirm(
-            "FormSaathi will send " + uploadCount + " relevant document(s) from this browser's local vault to its hosted OCR processor on Render. Files are processed in memory and are not saved to the server's disk. Extracted values remain unverified until you review them. Continue?"
+            "Saral Form will send " + uploadCount + " relevant document(s) from this browser's local vault to its hosted OCR processor on Render. Files are processed in memory and are not saved to the server's disk. Extracted values remain unverified until you review them. Continue?"
           );
 
           if (!approvedUpload) {
             documentOcrMessage = " Document OCR was skipped because you declined this upload.";
           } else {
             const session = await getExtensionSession();
-            if (!session) throw new Error("Your FormSaathi session expired. Connect your account again.");
-            setStatus("Processing " + relevantDocuments.length + " relevant document(s) through hosted FormSaathi OCR: " + relevantCategories.join(", ") + ".");
+            if (!session) throw new Error("Your Saral Form session expired. Connect your account again.");
+            setStatus("Processing " + relevantDocuments.length + " relevant document(s) through hosted Saral Form OCR: " + relevantCategories.join(", ") + ".");
             for (const document of relevantDocuments) {
               let documentFacts = document.cachedFacts || [];
               if (!document.cachedAt) {
@@ -301,14 +301,14 @@ export default function App() {
 
       if (account) {
         const consent = window.confirm(
-          "For AI form analysis, FormSaathi sends every detected visible field descriptor from this scan (labels, names, placeholders, types and dropdown choices, up to 120 fields) to its backend. The backend retrieves a few likely approved profile facts per field using regex hints and text similarity, then sends the complete field list and those candidates to Google Gemini to choose matches. Values already typed into the form, cookies and original document files are not sent. Continue with this one-time AI analysis?"
+          "For AI form analysis, Saral Form sends every detected visible field descriptor from this scan (labels, names, placeholders, types and dropdown choices, up to 120 fields) to its backend. The backend retrieves a few likely approved profile facts per field using regex hints and text similarity, then sends the complete field list and those candidates to Google Gemini to choose matches. Values already typed into the form, cookies and original document files are not sent. Continue with this one-time AI analysis?"
         );
 
         if (consent) {
           try {
-            setStatus("Sending field descriptions to the FormSaathi backend for AI matching…");
+            setStatus("Sending field descriptions to the Saral Form backend for AI matching…");
             const session = await getExtensionSession();
-            if (!session) throw new Error("Your FormSaathi session expired. Connect your account again.");
+            if (!session) throw new Error("Your Saral Form session expired. Connect your account again.");
             const analysis = await requestFormAnalysis(nextScan, session.access_token);
             finalRows = mergeAiMappings(baseRows, analysis.mappings);
             aiMessage = analysis.note || (analysis.aiUsed ? "AI matching completed." : "No AI matches were found.");
@@ -322,7 +322,7 @@ export default function App() {
           aiMessage = "AI analysis was skipped. Deterministic matches are still available for review.";
         }
       } else {
-        aiMessage = "Connect your FormSaathi account to send this scan to the hosted backend and use AI matching.";
+        aiMessage = "Connect your Saral Form account to send this scan to the hosted backend and use AI matching.";
       }
 
       setRows(finalRows);
@@ -397,9 +397,9 @@ export default function App() {
     }
 
     const confirmed = window.confirm(
-      "FormSaathi is ready to fill " + pendingRows.length +
+      "Saral Form is ready to fill " + pendingRows.length +
       " field(s) using the values shown in this panel. Check the suggestions first. " +
-      "This may replace values already entered in those fields. FormSaathi will not submit the form. Continue?"
+      "This may replace values already entered in those fields. Saral Form will not submit the form. Continue?"
     );
     if (!confirmed) return;
 
@@ -437,7 +437,7 @@ export default function App() {
       setStatus(
         "Filled " + successCount + " of " + pendingRows.length + " available field(s)." +
         (failureCount ? " " + failureCount + " field(s) could not be filled; review them individually." : " Review the completed fields before submitting the portal form.") +
-        " FormSaathi did not submit the application."
+        " Saral Form did not submit the application."
       );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not fill the fields on this page.");
@@ -458,18 +458,18 @@ export default function App() {
       return;
     }
     if (!account) {
-      setStatus("Connect your FormSaathi account before using backend AI mapping.");
+      setStatus("Connect your Saral Form account before using backend AI mapping.");
       return;
     }
     if (!window.confirm(
-      "This sends every detected visible field descriptor in the current scan (up to 120 fields), plus a small set of retrieved approved profile facts per field, to the FormSaathi backend and Google Gemini. Values already typed into the form, cookies and original document files are not sent. Continue?"
+      "This sends every detected visible field descriptor in the current scan (up to 120 fields), plus a small set of retrieved approved profile facts per field, to the Saral Form backend and Google Gemini. Values already typed into the form, cookies and original document files are not sent. Continue?"
     )) return;
 
     setBusy(true);
-    setStatus("Requesting AI mapping from the hosted FormSaathi backend…");
+    setStatus("Requesting AI mapping from the hosted Saral Form backend…");
     try {
       const session = await getExtensionSession();
-      if (!session) throw new Error("Your FormSaathi session expired. Connect your account again.");
+      if (!session) throw new Error("Your Saral Form session expired. Connect your account again.");
       const analysis = await requestFormAnalysis(scan, session.access_token);
       setRows((current) => mergeAiMappings(current, analysis.mappings));
       setStatus(
@@ -496,36 +496,36 @@ export default function App() {
     <main className="app-shell">
       <header className="brand-row">
         <div className="brand-block">
-          <div className="brand-mark">FS</div>
-          <div className="brand-name">FormSaathi</div>
+          <div className="brand-mark"><img src="/icons/saral-form-icon.png" alt="" /></div>
+          <div className="brand-name">Saral Form</div>
           <div className="brand-caption">Your form companion</div>
         </div>
         <div className={apiReady ? "service-pill online" : "service-pill offline"}>
-          <span /> FormSaathi API {apiReady ? "online" : "offline"}
+          <span /> Saral Form API {apiReady ? "online" : "offline"}
         </div>
       </header>
 
-      <section className="account-card" aria-label="FormSaathi account connection">
-        {accountLoading ? <p className="account-muted">Checking your FormSaathi account…</p> : account ? (
+      <section className="account-card" aria-label="Saral Form account connection">
+        {accountLoading ? <p className="account-muted">Checking your Saral Form account…</p> : account ? (
           <div className="account-connected">
             <div><strong>Account connected</strong><small>{account.email || "Signed in"}</small><small>Approved profile facts are available for form matching.</small></div>
             <button type="button" className="account-disconnect" disabled={authBusy} onClick={() => void handleDisconnect()}>{authBusy ? "Please wait…" : "Disconnect"}</button>
           </div>
         ) : (
           <form className="account-form" onSubmit={(event) => void handleConnect(event)}>
-            <div><strong>Connect your FormSaathi account</strong><small>Use the same email and password as the web app.</small></div>
+            <div><strong>Connect your Saral Form account</strong><small>Use the same email and password as the web app.</small></div>
             <input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="Email address" autoComplete="username" required />
             <input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder="Password" autoComplete="current-password" required />
             {authError && <p className="account-error" role="alert">{authError}</p>}
             <button className="primary-button full" type="submit" disabled={authBusy}>{authBusy ? "Connecting…" : "Connect account"}</button>
-            <a className="account-link" href="https://formsaathi-web.vercel.app" target="_blank" rel="noreferrer">Open FormSaathi website ↗</a>
+            <a className="account-link" href="https://formsaathi-web.vercel.app" target="_blank" rel="noreferrer">Open Saral Form website ↗</a>
           </form>
         )}
         {account && authError && <p className="account-error" role="alert">{authError}</p>}
       </section>
 
       <div className="privacy-note">
-        Your approved profile facts sync from FormSaathi. Selected local documents are sent to hosted OCR only after a separate confirmation. AI analysis sends the complete detected field-descriptor list (up to 120 fields) and only the retrieved approved-fact candidates per field after your confirmation; typed form values, cookies and original files are not sent to Gemini for webpage-form matching.
+        Your approved profile facts sync from Saral Form. Selected local documents are sent to hosted OCR only after a separate confirmation. AI analysis sends the complete detected field-descriptor list (up to 120 fields) and only the retrieved approved-fact candidates per field after your confirmation; typed form values, cookies and original files are not sent to Gemini for webpage-form matching.
       </div>
 
       <nav className="tabs">
@@ -612,7 +612,7 @@ export default function App() {
               </button>
               <p className="muted small">Fills only fields with a value. File uploads, conflicts and already-filled fields are skipped. The application is never submitted.</p>
               <button className="secondary-button full" disabled={busy} onClick={() => void tryAiMapping()}>Re-run AI form analysis</button>
-              <p className="muted small">Uses the hosted FormSaathi backend and Gemini. Each AI request requires your confirmation.</p>
+              <p className="muted small">Uses the hosted Saral Form backend and Gemini. Each AI request requires your confirmation.</p>
               <div className="mapping-list">
                 {rows.map((row, index) => (
                   <article className="mapping-card" key={row.field.id}>
@@ -645,7 +645,7 @@ export default function App() {
       )}
 
       <footer className="status-bar"><span className="status-dot" />{status}</footer>
-      <div className="footer-note">FormSaathi never submits an application for you.</div>
+      <div className="footer-note">Saral Form never submits an application for you.</div>
     </main>
   );
 }
