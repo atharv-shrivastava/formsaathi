@@ -267,11 +267,12 @@ export default function WorkspaceNavigation({
           targetX = 0;
           targetY = -0.045;
         };
-        host.addEventListener("pointermove", onPointerMove);
-        host.addEventListener("pointerleave", onPointerLeave);
+        const interactiveSurface = host.parentElement || host;
+        interactiveSurface.addEventListener("pointermove", onPointerMove);
+        interactiveSurface.addEventListener("pointerleave", onPointerLeave);
         removeHostListeners = () => {
-          host.removeEventListener("pointermove", onPointerMove);
-          host.removeEventListener("pointerleave", onPointerLeave);
+          interactiveSurface.removeEventListener("pointermove", onPointerMove);
+          interactiveSurface.removeEventListener("pointerleave", onPointerLeave);
         };
         observer = new ResizeObserver(resize);
         observer.observe(host);
