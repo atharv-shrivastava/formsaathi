@@ -27,8 +27,8 @@ const allowedOrigins = new Set(
 );
 
 function isAllowedOrigin(origin) {
-  if (!origin || allowedOrigins.has(origin)) return true;
-  // Chrome extension origins are authenticated independently with Supabase user tokens.
+  if (typeof origin !== "string" || !origin.trim()) return false;
+  if (allowedOrigins.has(origin)) return true;
   return /^chrome-extension:\/\/[a-p]{32}$/.test(origin);
 }
 
@@ -57,15 +57,23 @@ app.use((request, response, next) => {
   response.setHeader("Referrer-Policy", "no-referrer");
   response.setHeader("Cache-Control", "no-store");
   const origin = request.get("origin");
-  if (origin && !isAllowedOrigin(origin)) {
-    return response.status(403).json({ error: "This website is not allowed to use the FormSaathi API." });
+  const isApiRequest = request.path.startsWith("/api/");
+  // This is a browser-origin allowlist, not authentication: native clients can
+  // forge Origin. Every /api route still verifies the Supabase bearer token.
+  // Reject originless API calls while keeping /health usable by uptime probes.
+  if ((isApiRequest && !isAllowedOrigin(origin)) || (origin && !isAllowedOrigin(origin))) {
+    return response.status(403).json({
+      error: isApiRequest
+        ? "API requests must come from the Saral Form website or browser extension."
+        : "This website is not allowed to use the Saral Form API."
+    });
   }
   next();
 });
 
 app.use(cors({
   origin(origin, callback) {
-    callback(null, isAllowedOrigin(origin));
+    callback(null, Boolean(origin && isAllowedOrigin(origin)));
   },
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
