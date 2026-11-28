@@ -359,7 +359,7 @@ const hindiTranslations: Record<string, string> = {
   "When a form is scanned, the extension requests only verified profile fields that match detected form labels. Database row-level security determines which user's values can be returned.": "फ़ॉर्म स्कैन होने पर एक्सटेंशन केवल उन सत्यापित प्रोफ़ाइल फ़ील्ड का अनुरोध करता है जो पहचाने गए लेबल से मेल खाते हैं। डेटाबेस की row-level security तय करती है कि किस उपयोगकर्ता की जानकारी मिल सकती है।",
   "Distribution note:": "वितरण संबंधी सूचना:",
   "This is a development ZIP for manual installation. It is not yet published in the Chrome Web Store, so Chrome requires Developer mode and Load unpacked. The extension only fills fields after you approve them; it never submits the form.": "यह मैन्युअल इंस्टॉलेशन के लिए डेवलपमेंट ZIP है। यह अभी Chrome Web Store पर प्रकाशित नहीं है, इसलिए Chrome में Developer mode और Load unpacked ज़रूरी हैं। एक्सटेंशन केवल आपकी मंज़ूरी के बाद फ़ील्ड भरता है; फ़ॉर्म कभी सबमिट नहीं करता।",
-  "Sign out": "साइन आउट",
+  "Sign out": "साइन आउट",\n  "Main navigation": "मुख्य नेविगेशन",\n  "YOUR WORKSPACE": "आपका वर्कस्पेस",\n  "Navigation object": "नेविगेशन ऑब्जेक्ट",\n  "3D preview unavailable": "3D प्रीव्यू उपलब्ध नहीं",\n  "e.g. Post-matric scholarship": "उदाहरण: पोस्ट-मैट्रिक छात्रवृत्ति",
   "details waiting for review": "विवरण समीक्षा की प्रतीक्षा में"
 };
 
@@ -504,7 +504,7 @@ export default function AppLocalization({ children }: { children: ReactNode }) {
           type="button"
           aria-haspopup="menu"
           aria-expanded={menuOpen}
-          aria-label="Change app language"
+          aria-label={locale === "hi" ? "ऐप की भाषा बदलें" : "Change app language"}
           onClick={() => setMenuOpen((open) => !open)}
         >
           <span className="app-language-globe" aria-hidden="true">文</span>
@@ -513,14 +513,14 @@ export default function AppLocalization({ children }: { children: ReactNode }) {
         </button>
         {menuOpen && (
           <div className="app-language-menu" role="menu" aria-label="App language">
-            <p>Display language</p>
+            <p>{locale === "hi" ? "ऐप की भाषा" : "Display language"}</p>
             <button type="button" role="menuitemradio" aria-checked={locale === "en"} onClick={() => chooseLanguage("en")}>
               <span>English</span><span>{locale === "en" ? "✓" : ""}</span>
             </button>
             <button type="button" role="menuitemradio" aria-checked={locale === "hi"} onClick={() => chooseLanguage("hi")}>
               <span>हिन्दी</span><span>{locale === "hi" ? "✓" : ""}</span>
             </button>
-            <small>Only app labels and guidance are translated. Your documents and personal details stay unchanged.</small>
+            <small>{locale === "hi" ? "केवल ऐप के लेबल और निर्देश अनुवादित होते हैं। आपके दस्तावेज़ और निजी जानकारी नहीं बदलते।" : "Only app labels and guidance are translated. Your documents and personal details stay unchanged."}</small>
           </div>
         )}
       </div>
