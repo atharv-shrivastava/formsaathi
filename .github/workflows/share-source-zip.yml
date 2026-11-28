@@ -1,0 +1,46 @@
+name: Build shareable FormSaathi source ZIP
+
+on:
+  push:
+    branches:
+      - share/formsaathi-source-zip
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository snapshot
+        uses: actions/checkout@v4
+
+      - name: Build clean source archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p package/FormSaathi
+          git archive --format=tar HEAD | tar -xf - -C package/FormSaathi
+
+          # Remove local environment files and private-key material, while keeping .env.example.
+          find package -type f -name '.env*' ! -name '.env.example' -delete
+          find package -type f \( -name '*.pem' -o -name '*.p12' -o -name '*.pfx' -o -name '*.key' -o -name 'id_rsa' -o -name 'id_ed25519' \) -delete
+          find package -type d \( -name node_modules -o -name .git -o -name .next -o -name coverage \) -prune -exec rm -rf {} +
+
+          # Stop packaging if recognizable provider credentials or private keys remain in tracked source.
+          if grep -RIlE 'AIza[0-9A-Za-z_-]{30,}|sk-[A-Za-z0-9]{30,}|sb_secret_[A-Za-z0-9]{20,}|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----' package/FormSaathi; then
+            echo "::error::Potential secret detected in the repository snapshot. ZIP was not created."
+            exit 1
+          fi
+
+          cd package
+          zip -qr "$GITHUB_WORKSPACE/FormSaathi-Source.zip" FormSaathi
+          unzip -t "$GITHUB_WORKSPACE/FormSaathi-Source.zip"
+
+      - name: Upload source ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: formsaathi-source-zip
+          path: FormSaathi-Source.zip
+          if-no-files-found: error
+          retention-days: 7
