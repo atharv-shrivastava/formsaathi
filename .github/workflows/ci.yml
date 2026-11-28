@@ -81,6 +81,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: saral-form-chrome-extension
-          path: release/FormSaathi-Chrome-Extension.zip
+          path: release/Saral-Form-Chrome-Extension.zip
           if-no-files-found: error
           retention-days: 14
