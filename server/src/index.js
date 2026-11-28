@@ -8,7 +8,7 @@ import { processDocument } from "./ocr.js";
 import { buildDocumentExtractionPrompt, mergeDocumentFacts, validateDocumentExtraction } from "./document-extraction.js";
 import { prepareImage } from "./prepare.js";
 import { filterRelevantProfileFacts, retrieveProfileFactsForFields, sanitizeDetectedFields, validateAiMappings } from "./form-analysis.js";
-import { buildImageOverlaySvg, buildPaperFormFields, validatePaperPlacements } from "./paper-form.js";
+import { buildPaperFormFields, validatePaperPlacements } from "./paper-form.js";
 
 const app = express();
 const port = Number(process.env.PORT || 8787);
@@ -602,24 +602,27 @@ app.post(
         });
       }
 
-      const overlay = buildImageOverlaySvg(dimensions.width, dimensions.height, placements);
-      const filledImage = await sharp(orientedImage)
-        .composite([{ input: overlay, left: 0, top: 0 }])
-        .jpeg({ quality: 92, mozjpeg: true })
-        .toBuffer();
-
+      // Return the EXIF-corrected base image and validated placement geometry.
+      // The browser renders only placements the user keeps after editing them.
+      // This makes the STOP/approval step real: no filled copy exists before approval.
       return response.json({
-        image: filledImage.toString("base64"),
+        image: orientedImage.toString("base64"),
         mimeType: "image/jpeg",
         width: dimensions.width,
         height: dimensions.height,
         placements: placements.map((placement) => ({
+          lineIndex: placement.lineIndex,
           label: placement.label,
           factKey: placement.factKey,
           value: placement.value,
-          confidence: placement.confidence
+          confidence: placement.confidence,
+          x: placement.x,
+          y: placement.y,
+          width: placement.width,
+          height: placement.height,
+          sourceDocumentId: placement.sourceDocumentId || null
         })),
-        note: "A new image was created. The uploaded original was not changed or stored by this processing route. Check every field before printing or submitting."
+        note: "OCR and Gemini located suggested writing areas. Review and edit every value; the final copy is created locally only after you approve."
       });
     } catch (error) {
       const timedOut = error?.name === "TimeoutError" || error?.name === "AbortError";
