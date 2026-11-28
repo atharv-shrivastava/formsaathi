@@ -11,6 +11,7 @@ import type {
 } from "./lib/types";
 import { renderPaperFormImage } from "./lib/paper-form-render";
 import FormSaathiScene from "./components/FormSaathiScene";
+import WorkspaceNavigation from "./components/WorkspaceNavigation";
 
 type Page = "overview" | "documents" | "profile" | "applications" | "paper-scan" | "extension" | "privacy";
 type AuthMode = "signin" | "signup";
@@ -735,25 +736,15 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
 
   return (
     <div className="workspace">
-      <aside className="sidebar">
-        <div className="brand-lockup"><div className="brand-mark">S</div><span>Saral Form</span></div>
-        <div className="workspace-label">WORKSPACE</div>
-        <nav className="side-nav" aria-label="Main navigation">
-          {nav.map((item) => (
-            <button key={item.id} className={page === item.id ? "nav-item active" : "nav-item"} aria-current={page === item.id ? "page" : undefined} onClick={() => { setPage(item.id); clearNotice(); }}>
-              <span className="nav-icon">{item.icon}</span><span>{item.label}</span>
-              {item.id === "profile" && pendingFacts.length > 0 && <span className="nav-count">{pendingFacts.length}</span>}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="user-card">
-            <div className="avatar">{(user.user_metadata?.full_name || user.email || "F").slice(0, 1).toUpperCase()}</div>
-            <div className="user-meta"><strong>{displayName}</strong><span>{user.email}</span></div>
-            <button className="icon-button signout" onClick={onSignOut} title="Sign out" aria-label="Sign out">↗</button>
-          </div>
-        </div>
-      </aside>
+      <WorkspaceNavigation
+        items={nav}
+        selectedId={page}
+        pendingCount={pendingFacts.length}
+        displayName={String(displayName)}
+        email={user.email || ""}
+        onNavigate={(id) => { setPage(id as Page); clearNotice(); }}
+        onSignOut={onSignOut}
+      />
 
       <main className="main-panel">
         <header className="topbar">
