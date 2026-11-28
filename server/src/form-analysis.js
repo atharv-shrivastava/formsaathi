@@ -249,21 +249,20 @@ export function retrieveApprovedFactsForFields(fields, generalFacts, documentFac
   const documentRetrieved = retrieveProfileFactsForFields(fields, documentFacts);
 
   return fields.map((field, index) => {
-    const normalizedLabel = normalize([
-      field.label,
-      field.name,
-      field.placeholder
-    ].filter(Boolean).join(" "));
-    const documentSpecific = documentSpecificFieldPattern.test(normalizedLabel);
-    const preferred = documentSpecific ? documentRetrieved[index] : generalRetrieved[index];
-    const fallback = documentSpecific ? generalRetrieved[index] : documentRetrieved[index];
+    const generalCandidates = generalRetrieved[index].candidates;
+    const documentCandidates = documentRetrieved[index].candidates;
+    const candidates = [];
+    const seenFactIds = new Set();
 
-    // Prefer the right source, but fall back to the other approved store when
-    // the primary source has no matching fact. This avoids needlessly re-reading
-    // a document just because a fact was not promoted to the general profile.
-    const candidates = preferred.candidates.length
-      ? preferred.candidates
-      : fallback.candidates;
+    // Interleave both stores so a long list from one source cannot hide the
+    // other source. The validator can then reject conflicting values.
+    for (let rank = 0; rank < MAX_CANDIDATES_PER_FIELD; rank += 1) {
+      for (const candidate of [generalCandidates[rank], documentCandidates[rank]]) {
+        if (!candidate || seenFactIds.has(candidate.factId)) continue;
+        seenFactIds.add(candidate.factId);
+        candidates.push(candidate);
+      }
+    }
 
     return { fieldId: field.id, candidates: candidates.slice(0, MAX_CANDIDATES_PER_FIELD) };
   });
@@ -336,6 +335,11 @@ export function validateAiMappings(rawMappings, fields, retrievedFacts) {
     const candidate = retrievalByField.get(field?.id)?.get(candidateId);
     const confidence = Number(raw.confidence);
     if (!field || !candidate || field.isFile || blockedInputTypes.has(field.inputType)) continue;
+    const fieldCandidates = Array.from(retrievalByField.get(field.id)?.values() || []);
+    const distinctValues = new Set(fieldCandidates
+      .map((item) => normalize(item.factValue))
+      .filter(Boolean));
+    if (distinctValues.size > 1) continue;
     if (!Number.isFinite(confidence) || confidence < 0.72 || confidence > 1) continue;
     if (!String(candidate.factValue || "").trim()) continue;
 
