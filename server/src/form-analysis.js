@@ -49,9 +49,15 @@ const factAliases = {
   bank_account_number: ["bank account number", "account number", "account no"],
   aadhaar_number: ["aadhaar number", "aadhar number", "uid number", "uidai number"],
   pan_number: ["pan number", "pan card number", "permanent account number"],
-  passport_number: ["passport number", "passport no"],\n  document_number: ["document number", "document no", "serial number", "reference number"],\n  registration_number: ["registration number", "registration no", "enrolment number", "enrollment number"],\n  issue_date: ["issue date", "date of issue", "issued on"],\n  expiry_date: ["expiry date", "expiration date", "valid until"],\n  marks_obtained: ["marks obtained", "marks scored", "marks secured"],\n  total_marks: ["total marks", "maximum marks", "marks out of"],\n  cgpa: ["cgpa", "cumulative grade point average"],\n  sgpa: ["sgpa", "semester grade point average"],
-  certificate_number: ["certificate number", "certificate no", "document number"],
-  roll_number: ["roll number", "roll no", "registration number", "enrolment number"],
+  passport_number: ["passport number", "passport no"],
+  document_number: ["document number", "document no", "serial number", "reference number"],
+  registration_number: ["registration number", "registration no", "enrolment number", "enrollment number"],
+  issue_date: ["issue date", "date of issue", "issued on"],
+  expiry_date: ["expiry date", "expiration date", "valid until"],
+  marks_obtained: ["marks obtained", "marks scored", "marks secured"],
+  total_marks: ["total marks", "maximum marks", "marks out of"],
+  cgpa: ["cgpa", "cumulative grade point average"],
+  sgpa: ["sgpa", "semester grade point average"],
   ifsc_code: ["ifsc", "ifsc code"],
   postal_code: ["postal code", "pin code", "pincode", "zip code"],
   pincode: ["postal code", "pin code", "pincode", "zip code"],
@@ -235,7 +241,7 @@ export function retrieveProfileFactsForFields(fields, facts) {
   });
 }
 
-const documentSpecificFieldPattern = /\\b(aadhaar|aadhar|pan card|permanent account|passport|certificate|document number|serial number|roll number|registration number|enrolment|enrollment|student id|admission number|issue date|expiry date|percentage|cgpa|sgpa|marks obtained|marks scored|marksheet|mark sheet|board name|school name|grade)\\b/;
+const documentSpecificFieldPattern = /\b(aadhaar|aadhar|pan card|permanent account|passport|certificate|document number|serial number|roll number|registration number|enrolment|enrollment|student id|admission number|issue date|expiry date|percentage|cgpa|sgpa|marks obtained|marks scored|marksheet|mark sheet|board name|school name|grade)\b/;
 
 export function retrieveApprovedFactsForFields(fields, generalFacts, documentFacts) {
   const generalRetrieved = retrieveProfileFactsForFields(fields, generalFacts);
