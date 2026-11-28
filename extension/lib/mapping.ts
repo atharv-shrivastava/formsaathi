@@ -32,7 +32,17 @@ const aliases: Record<string, string[]> = {
   domicile_state: ["domicile state", "state of domicile"],
   school_name: ["school name", "name of school", "institution name"],
   roll_number: ["roll number", "roll no", "registration number", "enrolment number"],
-  passing_year: ["passing year", "year of passing", "completion year"]
+  passing_year: ["passing year", "year of passing", "completion year"],
+  certificate_number: ["certificate number", "certificate no", "certificate id"],
+  document_number: ["document number", "document no", "serial number", "reference number"],
+  passport_number: ["passport number", "passport no", "passport id"],
+  issue_date: ["issue date", "date of issue", "issued on"],
+  expiry_date: ["expiry date", "expiration date", "valid until"],
+  marks_obtained: ["marks obtained", "marks scored", "total marks obtained"],
+  total_marks: ["total marks", "maximum marks"],
+  cgpa: ["cgpa", "cumulative grade point average"],
+  sgpa: ["sgpa", "semester grade point average"],
+  board_name: ["board name", "education board", "exam board"]
 };
 
 function normalize(value: string): string {
