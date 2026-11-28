@@ -107,7 +107,7 @@ const generalProfileKeys = new Set([
   "email", "email_address", "phone", "phone_number", "mobile_number",
   "address", "permanent_address", "correspondence_address", "city", "state",
   "pincode", "postal_code", "nationality", "religion", "caste",
-  "annual_income", "family_income", "bank_account_number", "ifsc_code"
+  "annual_income", "family_income", "bank_account_number", "ifsc_code", "gender", "district"
 ]);
 
 function normalizedFactKey(key: string): string | null {
