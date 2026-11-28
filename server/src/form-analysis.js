@@ -49,7 +49,7 @@ const factAliases = {
   bank_account_number: ["bank account number", "account number", "account no"],
   aadhaar_number: ["aadhaar number", "aadhar number", "uid number", "uidai number"],
   pan_number: ["pan number", "pan card number", "permanent account number"],
-  passport_number: ["passport number", "passport no"],
+  passport_number: ["passport number", "passport no"],\n  document_number: ["document number", "document no", "serial number", "reference number"],\n  registration_number: ["registration number", "registration no", "enrolment number", "enrollment number"],\n  issue_date: ["issue date", "date of issue", "issued on"],\n  expiry_date: ["expiry date", "expiration date", "valid until"],\n  marks_obtained: ["marks obtained", "marks scored", "marks secured"],\n  total_marks: ["total marks", "maximum marks", "marks out of"],\n  cgpa: ["cgpa", "cumulative grade point average"],\n  sgpa: ["sgpa", "semester grade point average"],
   certificate_number: ["certificate number", "certificate no", "document number"],
   roll_number: ["roll number", "roll no", "registration number", "enrolment number"],
   ifsc_code: ["ifsc", "ifsc code"],
@@ -232,6 +232,33 @@ export function retrieveProfileFactsForFields(fields, facts) {
       .slice(0, MAX_CANDIDATES_PER_FIELD);
 
     return { fieldId: field.id, candidates };
+  });
+}
+
+const documentSpecificFieldPattern = /\\b(aadhaar|aadhar|pan card|permanent account|passport|certificate|document number|serial number|roll number|registration number|enrolment|enrollment|student id|admission number|issue date|expiry date|percentage|cgpa|sgpa|marks obtained|marks scored|marksheet|mark sheet|board name|school name|grade)\\b/;
+
+export function retrieveApprovedFactsForFields(fields, generalFacts, documentFacts) {
+  const generalRetrieved = retrieveProfileFactsForFields(fields, generalFacts);
+  const documentRetrieved = retrieveProfileFactsForFields(fields, documentFacts);
+
+  return fields.map((field, index) => {
+    const normalizedLabel = normalize([
+      field.label,
+      field.name,
+      field.placeholder
+    ].filter(Boolean).join(" "));
+    const documentSpecific = documentSpecificFieldPattern.test(normalizedLabel);
+    const preferred = documentSpecific ? documentRetrieved[index] : generalRetrieved[index];
+    const fallback = documentSpecific ? generalRetrieved[index] : documentRetrieved[index];
+
+    // Prefer the right source, but fall back to the other approved store when
+    // the primary source has no matching fact. This avoids needlessly re-reading
+    // a document just because a fact was not promoted to the general profile.
+    const candidates = preferred.candidates.length
+      ? preferred.candidates
+      : fallback.candidates;
+
+    return { fieldId: field.id, candidates: candidates.slice(0, MAX_CANDIDATES_PER_FIELD) };
   });
 }
 
