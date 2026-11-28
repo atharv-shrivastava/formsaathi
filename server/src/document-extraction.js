@@ -36,14 +36,14 @@ const canonicalAliases = [
 ];
 
 function compact(value, maxLength) {
-  return String(value ?? "").replace(/\\s+/g, " ").trim().slice(0, maxLength);
+  return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 
 function normalizeForMatch(value) {
   return String(value ?? "")
     .normalize("NFKC")
     .toLocaleLowerCase("en-IN")
-    .replace(/\\s+/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -53,8 +53,8 @@ function normalizeFieldLabel(value) {
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .toLocaleLowerCase("en-IN")
     .replace(/['’]/g, "")
-    .replace(/[^\\p{L}\\p{N}]+/gu, " ")
-    .replace(/\\s+/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -67,7 +67,7 @@ function containsAlias(label, alias) {
 function slugify(value) {
   const slug = String(value ?? "")
     .normalize("NFKD")
-    .replace(/[\\u0300-\\u036f]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
@@ -88,8 +88,8 @@ function canonicalizeFactKey(rawKey, label) {
 }
 
 function containsExactValue(text, value) {
-  const textTokens = normalizeForMatch(text).split(/[^\\p{L}\\p{N}]+/u).filter(Boolean);
-  const valueTokens = normalizeForMatch(value).split(/[^\\p{L}\\p{N}]+/u).filter(Boolean);
+  const textTokens = normalizeForMatch(text).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const valueTokens = normalizeForMatch(value).split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   if (valueTokens.length === 0 || valueTokens.length > textTokens.length) return false;
   for (let index = 0; index <= textTokens.length - valueTokens.length; index += 1) {
     if (valueTokens.every((token, offset) => token === textTokens[index + offset])) return true;
@@ -113,7 +113,7 @@ export function splitDocumentTextIntoChunks(rawText, maxChars = 18000, overlapCh
   while (start < source.length) {
     let end = Math.min(start + maxChars, source.length);
     if (end < source.length) {
-      const lineBreak = source.lastIndexOf("\\n", end);
+      const lineBreak = source.lastIndexOf("\n", end);
       if (lineBreak > start + Math.floor(maxChars * 0.65)) end = lineBreak;
     }
     if (end <= start) end = Math.min(start + maxChars, source.length);
@@ -122,7 +122,7 @@ export function splitDocumentTextIntoChunks(rawText, maxChars = 18000, overlapCh
     if (end >= source.length) break;
 
     const overlapStart = Math.max(start + 1, end - overlap);
-    const nextLineBreak = source.indexOf("\\n", overlapStart);
+    const nextLineBreak = source.indexOf("\n", overlapStart);
     const nextStart = nextLineBreak >= 0 && nextLineBreak < end
       ? nextLineBreak + 1
       : overlapStart;
@@ -150,7 +150,7 @@ function evidenceFromText(text, requestedEvidence, value) {
     return rawEvidence;
   }
 
-  const matchingLine = sourceText.split(/\\r?\\n/)
+  const matchingLine = sourceText.split(/\r?\n/)
     .map((line) => compact(line, 500))
     .find((line) => containsExactValue(line, normalizedValue));
   return matchingLine || "";
@@ -179,7 +179,7 @@ export function buildDocumentExtractionPrompt(ocrText, chunk = {}) {
     "----- OCR DOCUMENT TEXT -----",
     String(ocrText || ""),
     "----- END OCR DOCUMENT TEXT -----"
-  ].join("\\n");
+  ].join("\n");
 }
 
 export function validateDocumentExtraction(parsed, ocrText) {
@@ -206,7 +206,7 @@ export function validateDocumentExtraction(parsed, ocrText) {
       : 0.55;
     if (confidence < 0.35) continue;
 
-    const dedupeKey = modelKey + "\\u0000" + normalizeForMatch(value);
+    const dedupeKey = modelKey + "\u0000" + normalizeForMatch(value);
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
     facts.push({ key: modelKey, label, value, confidence, evidence });
@@ -222,7 +222,7 @@ export function mergeDocumentFacts(primaryFacts, fallbackFacts) {
     const key = canonicalizeFactKey(fact?.key, fact?.label) || slugify(fact?.key) || slugify(fact?.label);
     const value = compact(fact?.value, 500);
     if (!key || !value) continue;
-    const dedupeKey = key + "\\u0000" + normalizeForMatch(value);
+    const dedupeKey = key + "\u0000" + normalizeForMatch(value);
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
     merged.push({
