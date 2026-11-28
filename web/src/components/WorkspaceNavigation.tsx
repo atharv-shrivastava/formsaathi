@@ -52,7 +52,6 @@ export default function WorkspaceNavigation({
     let disposed = false;
     let frame = 0;
     let observer: ResizeObserver | undefined;
-    let removeHostListeners: (() => void) | undefined;
     let renderer: import("three").WebGLRenderer | undefined;
     let scene: import("three").Scene | undefined;
     const meshes = new Map<string, NavigationMesh>();
@@ -233,12 +232,6 @@ export default function WorkspaceNavigation({
         halo.scale.set(1, items.length * 0.38 + 0.6, 1);
         object.add(halo);
 
-        const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        let pointerX = 0;
-        let pointerY = 0;
-        let targetX = 0;
-        let targetY = -0.045;
-
         const resize = () => {
           if (!host || !renderer) return;
           const width = Math.max(host.clientWidth, 1);
@@ -253,25 +246,6 @@ export default function WorkspaceNavigation({
           renderer.setSize(width, height, false);
         };
 
-        const onPointerMove = (event: PointerEvent) => {
-          if (event.pointerType !== "mouse") return;
-          const bounds = host.getBoundingClientRect();
-          pointerX = (event.clientX - bounds.left) / Math.max(bounds.width, 1) - 0.5;
-          pointerY = (event.clientY - bounds.top) / Math.max(bounds.height, 1) - 0.5;
-          targetY = -0.045 + pointerX * 0.11;
-          targetX = -pointerY * 0.055;
-        };
-        const onPointerLeave = () => {
-          targetX = 0;
-          targetY = -0.045;
-        };
-        const interactiveSurface = host.parentElement || host;
-        interactiveSurface.addEventListener("pointermove", onPointerMove);
-        interactiveSurface.addEventListener("pointerleave", onPointerLeave);
-        removeHostListeners = () => {
-          interactiveSurface.removeEventListener("pointermove", onPointerMove);
-          interactiveSurface.removeEventListener("pointerleave", onPointerLeave);
-        };
         observer = new ResizeObserver(resize);
         observer.observe(host);
         resize();
@@ -279,10 +253,6 @@ export default function WorkspaceNavigation({
         const animate = () => {
           frame = window.requestAnimationFrame(animate);
           if (!object || !renderer || !scene) return;
-          if (!reducedMotion) {
-            object.rotation.x += (targetX - object.rotation.x) * 0.055;
-            object.rotation.y += (targetY - object.rotation.y) * 0.055;
-          }
           meshes.forEach((entry, id) => {
             const active = id === selectedIdRef.current;
             const hovered = id === hoveredIdRef.current;
@@ -309,7 +279,6 @@ export default function WorkspaceNavigation({
       disposed = true;
       window.cancelAnimationFrame(frame);
       observer?.disconnect();
-      removeHostListeners?.();
       scene?.traverse((object) => {
         const mesh = object as import("three").Mesh;
         if (mesh.geometry) mesh.geometry.dispose();
