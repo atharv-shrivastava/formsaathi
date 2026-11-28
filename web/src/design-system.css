@@ -777,3 +777,293 @@ code { color: var(--action); background: #eef2ec; }
 @media (prefers-reduced-motion: reduce) {
   .nav-card { animation: none; transition: none; transform: none !important; }
 }
+
+/* Saral Form glass system: consistent translucency, depth and readable surfaces. */
+:root {
+  --glass-bg: rgba(255, 255, 255, .68);
+  --glass-bg-strong: rgba(255, 255, 255, .82);
+  --glass-bg-soft: rgba(255, 255, 255, .48);
+  --glass-border: rgba(255, 255, 255, .78);
+  --glass-line: rgba(105, 126, 108, .16);
+  --glass-shadow: 0 16px 42px rgba(39, 62, 45, .075), inset 0 1px 0 rgba(255,255,255,.88);
+  --glass-blur: 18px;
+}
+
+/* A quiet, layered canvas gives the translucent surfaces something to reveal. */
+body {
+  background:
+    radial-gradient(ellipse at 12% 8%, rgba(202, 222, 201, .42), transparent 34%),
+    radial-gradient(ellipse at 86% 18%, rgba(222, 214, 190, .26), transparent 31%),
+    linear-gradient(135deg, #f5f7f2 0%, #eef3ed 48%, #f7f6f0 100%);
+  background-attachment: fixed;
+}
+.workspace {
+  background:
+    radial-gradient(ellipse at 5% 7%, rgba(202, 222, 201, .36), transparent 36%),
+    radial-gradient(ellipse at 84% 15%, rgba(225, 216, 192, .22), transparent 30%),
+    linear-gradient(135deg, #f4f7f2 0%, #edf2ec 54%, #f7f6f0 100%);
+}
+.main-panel { background: transparent; }
+
+/* Global navigation and content frame. */
+.workspace-sidebar {
+  background: rgba(255, 255, 255, .73);
+  border-right-color: rgba(255,255,255,.86);
+  box-shadow: 8px 0 32px rgba(43, 63, 47, .045), inset -1px 0 rgba(114,140,117,.08);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(135%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(135%);
+}
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  background: rgba(250, 252, 248, .7);
+  border-bottom: 1px solid rgba(255,255,255,.8);
+  box-shadow: 0 5px 22px rgba(40, 59, 44, .035);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+}
+
+/* Reusable glass surfaces across every working section. */
+.auth-card,
+.setup-card,
+.surface-card,
+.stat-card,
+.next-step-card,
+.extension-strip,
+.upload-card,
+.document-table,
+.profile-section,
+.review-section,
+.fact-card,
+.manual-profile-card,
+.candidate-document-group,
+.paper-workflow,
+.paper-scan-intro,
+.paper-upload-card,
+.paper-result-card,
+.paper-preview-block,
+.paper-placement-row,
+.application-form,
+.application-row,
+.privacy-card,
+.data-controls,
+.extension-steps-card,
+.extension-connect-card,
+.extension-account-summary > div,
+.review-bulk-toolbar {
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(132%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(132%);
+}
+
+.auth-card {
+  background: rgba(255,255,255,.72);
+  border-color: rgba(255,255,255,.88);
+  box-shadow: 0 22px 58px rgba(42,61,45,.10), inset 0 1px rgba(255,255,255,.95);
+}
+.setup-card {
+  background: rgba(255,255,255,.76);
+  border-color: rgba(255,255,255,.9);
+}
+.surface-card,
+.stat-card,
+.next-step-card,
+.extension-strip,
+.upload-card,
+.profile-section,
+.review-section,
+.manual-profile-card,
+.paper-scan-intro,
+.paper-upload-card,
+.paper-result-card,
+.application-form,
+.application-row,
+.privacy-card,
+.data-controls,
+.extension-steps-card,
+.extension-connect-card {
+  border-color: rgba(255,255,255,.82);
+}
+.welcome-banner {
+  border-color: rgba(255,255,255,.78);
+  background: linear-gradient(125deg, rgba(228,239,226,.78), rgba(255,255,255,.52));
+  box-shadow: 0 18px 44px rgba(40,65,45,.07), inset 0 1px rgba(255,255,255,.9);
+  -webkit-backdrop-filter: blur(20px) saturate(130%);
+  backdrop-filter: blur(20px) saturate(130%);
+}
+.next-step-card { background: rgba(255,255,255,.66); }
+.stat-card { background: rgba(255,255,255,.61); }
+.surface-card { background: rgba(255,255,255,.64); }
+.extension-strip { background: rgba(255,255,255,.62); }
+
+/* Tables and review groups stay more opaque to protect scanning and data accuracy. */
+.document-table,
+.candidate-document-group {
+  background: rgba(255,255,255,.82);
+  border-color: rgba(255,255,255,.9);
+}
+.table-heading { background: rgba(239,244,237,.82); }
+.document-row,
+.candidate-document-heading { background: rgba(255,255,255,.26); }
+.fact-card { background: rgba(255,255,255,.63); }
+.candidate-document-group { box-shadow: 0 9px 24px rgba(39,62,45,.045), inset 0 1px rgba(255,255,255,.9); }
+.review-bulk-toolbar { background: rgba(249,251,247,.68); }
+.evidence { background: rgba(247,249,245,.74); }
+
+/* Form controls remain visibly solid enough to edit without guessing their boundaries. */
+.auth-form input,
+.application-fields input,
+.category-picker select,
+.table-select,
+.candidate-edit-input,
+.manual-profile-control input,
+.manual-profile-control select,
+.paper-placement-value input,
+.status-select {
+  border-color: rgba(112,135,116,.24);
+  background: rgba(255,255,255,.82);
+  box-shadow: inset 0 1px 2px rgba(37,59,42,.035);
+}
+.auth-form input:focus,
+.application-fields input:focus,
+.candidate-edit-input:focus,
+.manual-profile-control input:focus,
+.paper-placement-value input:focus,
+.category-picker select:focus,
+.table-select:focus,
+.status-select:focus {
+  background: rgba(255,255,255,.96);
+  box-shadow: 0 0 0 3px rgba(49,91,70,.12), inset 0 1px 2px rgba(37,59,42,.025);
+}
+.button:not(.primary):not(.danger-button):not(.approve-button):not(.candidate-save) {
+  background: rgba(255,255,255,.68);
+  border-color: rgba(255,255,255,.9);
+  box-shadow: 0 3px 10px rgba(38,58,42,.035), inset 0 1px rgba(255,255,255,.9);
+}
+.button.primary,
+.approve-button,
+.candidate-save {
+  box-shadow: 0 7px 16px rgba(38,79,55,.16), inset 0 1px rgba(255,255,255,.13);
+}
+.mini-button,
+.soft-badge,
+.status-chip,
+.review-count,
+.reviewed-count,
+.paper-profile-count,
+.privacy-status {
+  border: 1px solid rgba(255,255,255,.78);
+  box-shadow: inset 0 1px rgba(255,255,255,.72);
+}
+.file-icon,
+.upload-symbol,
+.stat-icon,
+.application-icon,
+.extension-icon,
+.paper-scan-symbol,
+.profile-shield,
+.privacy-card-icon,
+.empty-illustration {
+  box-shadow: inset 0 1px rgba(255,255,255,.8), 0 4px 12px rgba(42,64,46,.045);
+}
+
+/* Status banners and special callouts keep their semantic colours. */
+.notice,
+.form-error,
+.form-success,
+.security-callout,
+.paper-error,
+.paper-message,
+.paper-stop-gate {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+.success-notice { background: rgba(237,245,237,.82); }
+.error-notice { background: rgba(255,241,237,.88); }
+.form-error { background: rgba(255,241,237,.9); }
+.form-success { background: rgba(237,246,239,.9); }
+.security-callout { background: rgba(251,248,240,.84); }
+
+/* The sign-in story keeps its deep green identity, with a translucent scene layer. */
+.auth-story {
+  background:
+    radial-gradient(ellipse at 76% 15%, rgba(134,169,137,.25), transparent 38%),
+    linear-gradient(145deg, #20392e, #294b39 62%, #1f3a2e);
+}
+.auth-scene-layer {
+  filter: drop-shadow(0 18px 30px rgba(7,22,13,.16));
+}
+.auth-panel {
+  background:
+    radial-gradient(ellipse at 20% 15%, rgba(208,225,207,.42), transparent 42%),
+    linear-gradient(145deg, rgba(246,249,244,.88), rgba(239,244,237,.92));
+}
+.auth-footnote { color: #68776c; }
+
+/* Privacy hero is intentionally dark, now with a glass edge and internal light. */
+.privacy-hero {
+  border: 1px solid rgba(255,255,255,.22);
+  background:
+    radial-gradient(ellipse at 82% 10%, rgba(255,255,255,.14), transparent 38%),
+    linear-gradient(115deg, rgba(36,61,50,.94), rgba(49,91,70,.9));
+  box-shadow: 0 18px 42px rgba(31,63,44,.13), inset 0 1px rgba(255,255,255,.2);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+/* Subtle depth on hover; motion never changes the layout. */
+.surface-card,
+.stat-card,
+.next-step-card,
+.extension-strip,
+.privacy-card,
+.application-row {
+  transition: transform 220ms var(--ease), box-shadow 220ms var(--ease), background 220ms var(--ease);
+}
+.surface-card:hover,
+.stat-card:hover,
+.next-step-card:hover,
+.extension-strip:hover,
+.privacy-card:hover,
+.application-row:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 46px rgba(39,62,45,.09), inset 0 1px rgba(255,255,255,.92);
+}
+.page-footer { border-color: rgba(255,255,255,.66); }
+
+/* Glass effects gracefully fall back when backdrop filters are unavailable. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .workspace-sidebar,.topbar,.auth-card,.setup-card,.surface-card,.stat-card,
+  .next-step-card,.extension-strip,.upload-card,.document-table,.profile-section,
+  .review-section,.fact-card,.manual-profile-card,.candidate-document-group,
+  .paper-workflow,.paper-scan-intro,.paper-upload-card,.paper-result-card,
+  .paper-preview-block,.paper-placement-row,.application-form,.application-row,
+  .privacy-card,.data-controls,.extension-steps-card,.extension-connect-card,
+  .extension-account-summary > div,.review-bulk-toolbar {
+    background: rgba(255,255,255,.94);
+  }
+}
+@media (max-width: 860px) {
+  .workspace-sidebar {
+    background: rgba(250,252,248,.82);
+    border-top-color: rgba(255,255,255,.9);
+    -webkit-backdrop-filter: blur(20px) saturate(150%);
+    backdrop-filter: blur(20px) saturate(150%);
+  }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .workspace-sidebar,.topbar,.auth-card,.setup-card,.surface-card,.stat-card,
+  .next-step-card,.extension-strip,.upload-card,.document-table,.profile-section,
+  .review-section,.fact-card,.manual-profile-card,.candidate-document-group,
+  .paper-workflow,.paper-scan-intro,.paper-upload-card,.paper-result-card,
+  .paper-preview-block,.paper-placement-row,.application-form,.application-row,
+  .privacy-card,.data-controls,.extension-steps-card,.extension-connect-card,
+  .extension-account-summary > div,.review-bulk-toolbar {
+    background: rgba(255,255,255,.97);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
