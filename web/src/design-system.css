@@ -1067,3 +1067,199 @@ body {
     backdrop-filter: none;
   }
 }
+
+/* Interactive workspace depth: pointer tilt, layered controls and section transitions. */
+.workspace {
+  perspective: 1500px;
+  perspective-origin: 50% 0%;
+}
+.main-panel {
+  transform-style: preserve-3d;
+}
+.page-wrap {
+  transform-style: preserve-3d;
+}
+.page-content {
+  transform-style: preserve-3d;
+  perspective: 1200px;
+  animation: workspace-page-enter 520ms cubic-bezier(.2,.78,.2,1) both;
+  transform-origin: 50% 0;
+}
+.page-heading {
+  transform: translateZ(10px);
+  animation: workspace-heading-enter 460ms cubic-bezier(.2,.78,.2,1) both;
+}
+
+/* Real working cards respond to pointer position, not random perpetual motion. */
+.workspace .stat-card,
+.workspace .surface-card,
+.workspace .next-step-card,
+.workspace .fact-card,
+.workspace .application-row,
+.workspace .candidate-document-group,
+.workspace .paper-placement-row {
+  --depth-rotate-x: 0deg;
+  --depth-rotate-y: 0deg;
+  transform: perspective(1100px)
+    rotateX(var(--depth-rotate-x))
+    rotateY(var(--depth-rotate-y))
+    translateZ(0);
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+  transition:
+    transform 190ms cubic-bezier(.2,.8,.2,1),
+    box-shadow 220ms ease,
+    border-color 220ms ease;
+  will-change: transform;
+}
+.workspace .stat-card:hover,
+.workspace .surface-card:hover,
+.workspace .next-step-card:hover,
+.workspace .fact-card:hover,
+.workspace .application-row:hover,
+.workspace .candidate-document-group:hover,
+.workspace .paper-placement-row:hover {
+  transform: perspective(1100px)
+    rotateX(var(--depth-rotate-x))
+    rotateY(var(--depth-rotate-y))
+    translateY(-3px)
+    translateZ(7px);
+  box-shadow:
+    0 21px 44px rgba(37,61,43,.105),
+    0 4px 10px rgba(37,61,43,.035),
+    inset 0 1px rgba(255,255,255,.94);
+  border-color: rgba(255,255,255,.98);
+}
+.workspace .document-table:hover {
+  transform: perspective(1400px) rotateX(.35deg) translateZ(2px);
+}
+.workspace .stat-card,
+.workspace .fact-card,
+.workspace .next-step-card,
+.workspace .application-row,
+.workspace .candidate-document-group,
+.workspace .paper-placement-row {
+  transform-origin: center center;
+}
+
+/* Small elements lift from their surfaces, giving each panel actual depth. */
+.stat-icon,
+.file-icon,
+.upload-symbol,
+.profile-shield,
+.paper-scan-symbol,
+.privacy-card-icon,
+.application-icon,
+.extension-icon,
+.extension-mark,
+.empty-illustration,
+.nav-card-icon {
+  transform-style: preserve-3d;
+  transition: transform 260ms cubic-bezier(.2,.8,.2,1), box-shadow 260ms ease;
+}
+.stat-card:hover .stat-icon,
+.surface-card:hover .file-icon,
+.surface-card:hover .upload-symbol,
+.surface-card:hover .profile-shield,
+.surface-card:hover .paper-scan-symbol,
+.surface-card:hover .privacy-card-icon,
+.surface-card:hover .application-icon,
+.surface-card:hover .extension-icon,
+.surface-card:hover .extension-mark,
+.surface-card:hover .empty-illustration {
+  transform: translateZ(18px) rotateY(-9deg) rotateX(5deg);
+  box-shadow: 0 9px 18px rgba(40,64,45,.12), inset 0 1px rgba(255,255,255,.9);
+}
+
+/* The main call-to-action has a physical press response. */
+.button,
+.mini-button,
+.nav-card {
+  transform-style: preserve-3d;
+  transition:
+    transform 180ms cubic-bezier(.2,.8,.2,1),
+    box-shadow 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease;
+}
+.button:active:not(:disabled),
+.mini-button:active:not(:disabled) {
+  transform: translateY(1px) scale(.985);
+}
+.nav-card:active { transform: translateY(1px) scale(.985); }
+
+/* A short depth-settle on each section change. */
+@keyframes workspace-page-enter {
+  0% {
+    opacity: 0;
+    transform: perspective(1200px) translateY(13px) rotateX(-1.2deg) scale(.992);
+    filter: blur(2px);
+  }
+  65% {
+    opacity: 1;
+    transform: perspective(1200px) translateY(-1px) rotateX(.12deg) scale(1.001);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: perspective(1200px) translateY(0) rotateX(0) scale(1);
+    filter: blur(0);
+  }
+}
+@keyframes workspace-heading-enter {
+  from { opacity: .4; transform: translateY(7px) translateZ(0); }
+  to { opacity: 1; transform: translateY(0) translateZ(10px); }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .workspace .stat-card,
+  .workspace .surface-card,
+  .workspace .next-step-card,
+  .workspace .fact-card,
+  .workspace .application-row,
+  .workspace .candidate-document-group,
+  .workspace .paper-placement-row {
+    will-change: auto;
+  }
+  .workspace .stat-card:hover,
+  .workspace .surface-card:hover,
+  .workspace .next-step-card:hover,
+  .workspace .fact-card:hover,
+  .workspace .application-row:hover,
+  .workspace .candidate-document-group:hover,
+  .workspace .paper-placement-row:hover {
+    transform: translateY(-1px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-content,
+  .page-heading {
+    animation: none !important;
+    filter: none !important;
+  }
+  .workspace .stat-card,
+  .workspace .surface-card,
+  .workspace .next-step-card,
+  .workspace .fact-card,
+  .workspace .application-row,
+  .workspace .candidate-document-group,
+  .workspace .paper-placement-row,
+  .button,
+  .mini-button {
+    transition: none !important;
+    transform: none !important;
+    will-change: auto;
+  }
+  .stat-card:hover .stat-icon,
+  .surface-card:hover .file-icon,
+  .surface-card:hover .upload-symbol,
+  .surface-card:hover .profile-shield,
+  .surface-card:hover .paper-scan-symbol,
+  .surface-card:hover .privacy-card-icon,
+  .surface-card:hover .application-icon,
+  .surface-card:hover .extension-icon,
+  .surface-card:hover .extension-mark,
+  .surface-card:hover .empty-illustration {
+    transform: none !important;
+  }
+}
