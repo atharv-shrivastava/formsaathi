@@ -228,6 +228,7 @@ export function retrieveProfileFactsForFields(fields, facts) {
           retrievalReasons: retrieval.reasons,
           sourceDocumentId: fact.source_document_id || null,
           sourceType: fact.sourceType || "general",
+          sourceName: fact.sourceName || null,
           updatedAt: fact.updated_at || null
         } : null;
       })
@@ -357,6 +358,7 @@ export function validateAiMappings(rawMappings, fields, retrievedFacts) {
       confidence,
       sourceDocumentId: candidate.sourceDocumentId || null,
       sourceType: candidate.sourceType || "general",
+      sourceName: candidate.sourceName || null,
       updatedAt: candidate.updatedAt || null
     };
     const current = bestByField.get(field.id);
