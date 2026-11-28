@@ -9,6 +9,7 @@ import type {
   TrackedApplication,
   UserDocument
 } from "./lib/types";
+import { renderPaperFormImage } from "./lib/paper-form-render";
 
 type Page = "overview" | "documents" | "profile" | "applications" | "paper-scan" | "extension" | "privacy";
 type AuthMode = "signin" | "signup";
@@ -1215,46 +1216,110 @@ interface PaperPlacement {
   factKey: string;
   value: string;
   confidence: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  lineIndex?: number;
+  sourceDocumentId?: string | null;
+  included: boolean;
+  originalValue: string;
 }
+
+type PaperScanStage = "upload" | "review" | "confirm" | "done";
 
 function PaperFormPage({ verifiedFacts }: { verifiedFacts: ProfileFact[] }) {
   const [file, setFile] = useState<File | null>(null);
   const [originalUrl, setOriginalUrl] = useState("");
+  const [baseImageUrl, setBaseImageUrl] = useState("");
+  const [previewUrl, setPreviewUrl] = useState("");
   const [filledUrl, setFilledUrl] = useState("");
   const [placements, setPlacements] = useState<PaperPlacement[]>([]);
+  const [stage, setStage] = useState<PaperScanStage>("upload");
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [renderingPreview, setRenderingPreview] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
   const previewUrls = useRef<string[]>([]);
+  const renderedPreviewRef = useRef<string>("");
+
+  function createTrackedUrl(blob: Blob) {
+    const url = URL.createObjectURL(blob);
+    previewUrls.current.push(url);
+    return url;
+  }
+
+  function releaseUrl(url: string) {
+    if (!url) return;
+    URL.revokeObjectURL(url);
+    previewUrls.current = previewUrls.current.filter((item) => item !== url);
+    if (renderedPreviewRef.current === url) renderedPreviewRef.current = "";
+  }
+
+  function clearGeneratedImages() {
+    [baseImageUrl, previewUrl, filledUrl].forEach(releaseUrl);
+    setBaseImageUrl("");
+    setPreviewUrl("");
+    setFilledUrl("");
+    renderedPreviewRef.current = "";
+  }
+
   useEffect(() => () => {
     previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
     previewUrls.current = [];
   }, []);
 
+  useEffect(() => {
+    let active = true;
+
+    if (!baseImageUrl) {
+      if (renderedPreviewRef.current) releaseUrl(renderedPreviewRef.current);
+      setPreviewUrl("");
+      setRenderingPreview(false);
+      return () => { active = false; };
+    }
+
+    setRenderingPreview(true);
+    void renderPaperFormImage(
+      baseImageUrl,
+      placements.filter((placement) => placement.included)
+    ).then((blob) => {
+      if (!active) return;
+      const nextUrl = createTrackedUrl(blob);
+      if (renderedPreviewRef.current) releaseUrl(renderedPreviewRef.current);
+      renderedPreviewRef.current = nextUrl;
+      setPreviewUrl(nextUrl);
+    }).catch((reason) => {
+      if (active) setError(messageFor(reason));
+    }).finally(() => {
+      if (active) setRenderingPreview(false);
+    });
+
+    return () => { active = false; };
+  }, [baseImageUrl, placements]);
+
+  function resetScan() {
+    clearGeneratedImages();
+    if (originalUrl) releaseUrl(originalUrl);
+    setOriginalUrl("");
+    setFile(null);
+    setPlacements([]);
+    setStage("upload");
+    setConsent(false);
+    setBusy(false);
+    setRenderingPreview(false);
+    setError("");
+    setMessage("");
+  }
+
   function chooseImage(event: ChangeEvent<HTMLInputElement>) {
     const nextFile = event.target.files?.[0] || null;
     event.target.value = "";
     if (!nextFile) return;
-    setError("");
-    setMessage("");
-    setPlacements([]);
-    setConsent(false);
-    setFile(null);
-    if (originalUrl) {
-      URL.revokeObjectURL(originalUrl);
-      previewUrls.current = previewUrls.current.filter((url) => url !== originalUrl);
-      setOriginalUrl("");
-    }
-    setFilledUrl((current) => {
-      if (current) {
-        URL.revokeObjectURL(current);
-        previewUrls.current = previewUrls.current.filter((url) => url !== current);
-      }
-      return "";
-    });
 
+    resetScan();
     if (!["image/jpeg", "image/png", "image/webp"].includes(nextFile.type)) {
       setError("Choose a JPG, PNG or WebP photo. HEIC conversion is not enabled in this prototype.");
       return;
@@ -1263,10 +1328,9 @@ function PaperFormPage({ verifiedFacts }: { verifiedFacts: ProfileFact[] }) {
       setError("The photo must be 10 MB or smaller.");
       return;
     }
+
     setFile(nextFile);
-    const nextUrl = URL.createObjectURL(nextFile);
-    previewUrls.current.push(nextUrl);
-    setOriginalUrl(nextUrl);
+    setOriginalUrl(createTrackedUrl(nextFile));
   }
 
   async function scanAndFill() {
@@ -1287,13 +1351,7 @@ function PaperFormPage({ verifiedFacts }: { verifiedFacts: ProfileFact[] }) {
     setError("");
     setMessage("Reading printed labels and locating safe writing areas…");
     setPlacements([]);
-    setFilledUrl((current) => {
-      if (current) {
-        URL.revokeObjectURL(current);
-        previewUrls.current = previewUrls.current.filter((url) => url !== current);
-      }
-      return "";
-    });
+    clearGeneratedImages();
 
     try {
       const { data: sessionData, error: sessionError } = await supabase!.auth.getSession();
@@ -1312,31 +1370,86 @@ function PaperFormPage({ verifiedFacts }: { verifiedFacts: ProfileFact[] }) {
       const payload = await response.json().catch(() => ({})) as {
         image?: string;
         mimeType?: string;
-        placements?: PaperPlacement[];
+        placements?: Array<{
+          label: string;
+          factKey: string;
+          value: string;
+          confidence: number;
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+          lineIndex?: number;
+          sourceDocumentId?: string | null;
+        }>;
         note?: string;
         error?: string;
       };
-      if (!response.ok) throw new Error(payload.error || "FormSaathi could not fill this paper form.");
-      if (!payload.image) throw new Error("The backend did not return a filled image.");
+      if (!response.ok) throw new Error(payload.error || "FormSaathi could not analyse this paper form.");
+      if (!payload.image) throw new Error("The backend did not return the oriented source image.");
+      const detectedPlacements = Array.isArray(payload.placements) ? payload.placements : [];
+      if (detectedPlacements.length === 0) {
+        throw new Error("No safe writable areas were found. Try a sharper, straight-on photo or fill the paper form manually.");
+      }
 
       const binary = atob(payload.image);
       const bytes = new Uint8Array(binary.length);
-      for (let index = 0; index < binary.length; index += 1) {
-        bytes[index] = binary.charCodeAt(index);
-      }
-      const resultBlob = new Blob([bytes], { type: payload.mimeType || "image/jpeg" });
-      const resultUrl = URL.createObjectURL(resultBlob);
-      previewUrls.current.push(resultUrl);
-      setFilledUrl(resultUrl);
-      setPlacements(payload.placements || []);
-      setMessage(payload.note || "Filled image created. Verify every value before using it.");
+      for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+      const baseBlob = new Blob([bytes], { type: payload.mimeType || "image/jpeg" });
+      const nextBaseUrl = createTrackedUrl(baseBlob);
+      const reviewPlacements = detectedPlacements.map((placement) => ({
+        ...placement,
+        value: String(placement.value || ""),
+        originalValue: String(placement.value || ""),
+        included: true
+      }));
+
+      setBaseImageUrl(nextBaseUrl);
+      setPlacements(reviewPlacements);
+      setStage("review");
+      setMessage(payload.note || "Form labels were analysed. Review every suggested value and its placement before approving a copy.");
     } catch (reason) {
       setError(messageFor(reason));
       setMessage("");
+      setStage("upload");
     } finally {
       setBusy(false);
     }
   }
+
+  function updatePlacement(index: number, changes: Partial<PaperPlacement>) {
+    setPlacements((current) => current.map((placement, currentIndex) =>
+      currentIndex === index ? { ...placement, ...changes } : placement
+    ));
+  }
+
+  async function approveAndCreateCopy() {
+    if (!baseImageUrl) {
+      setError("The original scanned image is no longer available. Scan the form again.");
+      return;
+    }
+    const selectedPlacements = placements.filter((placement) => placement.included);
+    if (selectedPlacements.length === 0) {
+      setError("Keep at least one reviewed field in the final copy.");
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    try {
+      const resultBlob = await renderPaperFormImage(baseImageUrl, selectedPlacements);
+      setFilledUrl(createTrackedUrl(resultBlob));
+      setStage("done");
+      setMessage("You approved the reviewed values. A new downloadable copy has been prepared; nothing was submitted.");
+    } catch (reason) {
+      setError(messageFor(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const includedCount = placements.filter((placement) => placement.included).length;
+  const activeStep = busy ? 2 : stage === "upload" ? 1 : stage === "review" ? 3 : stage === "confirm" ? 4 : 5;
 
   return (
     <div className="page-content">
@@ -1344,63 +1457,138 @@ function PaperFormPage({ verifiedFacts }: { verifiedFacts: ProfileFact[] }) {
         <div className="paper-scan-symbol">▧</div>
         <div>
           <p className="eyebrow">Paper form assistant</p>
-          <h3>Photograph a paper form. Get a filled copy.</h3>
-          <p>Use your phone camera or select a photo from your gallery. FormSaathi reads the printed labels, matches them to your approved profile and places the values into clear writing spaces.</p>
+          <h3>Photograph a paper form. Review it. Download a filled copy.</h3>
+          <p>FormSaathi reads printed labels, matches only your approved profile values and suggests safe writing areas. You edit and approve every placement before the final copy is created.</p>
           <div className="paper-profile-count">{verifiedFacts.length} reviewed profile value(s) available</div>
         </div>
       </section>
 
-      <section className="surface-card paper-upload-card">
-        <div className="section-head"><div><p className="eyebrow">Add your form</p><h3>Take a photo or choose an image</h3></div><span className="soft-badge">JPG · PNG · WebP</span></div>
-        <div className="paper-action-row">
-          <label className="button primary paper-choice">
-            <span>▣ Open camera</span>
-            <input type="file" accept="image/*" capture="environment" onChange={chooseImage} />
-          </label>
-          <label className="button paper-gallery paper-choice">
-            <span>▤ Choose from gallery</span>
-            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseImage} />
-          </label>
-        </div>
-        <p className="paper-guidance">Keep the entire page inside the frame. Photograph it from directly above, in good light, without shadows or blur.</p>
-        {originalUrl && (
-          <div className="paper-preview-block">
-            <div className="paper-preview-head"><strong>Original photo</strong><span>{file?.name}</span></div>
-            <img className="paper-preview-image" src={originalUrl} alt="Original paper form photo" />
+      <nav className="paper-workflow" aria-label="Paper form filling steps">
+        {[
+          { number: 1, label: "Add photo" },
+          { number: 2, label: "Analyse" },
+          { number: 3, label: "Review values" },
+          { number: 4, label: "Final check" },
+          { number: 5, label: "Download" }
+        ].map((step) => (
+          <div
+            className={activeStep === step.number ? "paper-workflow-step active" : activeStep > step.number ? "paper-workflow-step complete" : "paper-workflow-step"}
+            key={step.number}
+            aria-current={activeStep === step.number ? "step" : undefined}
+          >
+            <span>{activeStep > step.number ? "✓" : step.number}</span>
+            <strong>{step.label}</strong>
           </div>
-        )}
-        <label className="paper-consent">
-          <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-          <span>I agree to send this photo and relevant approved profile values to Google Gemini through FormSaathi for form analysis. The processing route does not save the photo to my document vault.</span>
-        </label>
-        <button className="button primary paper-scan-button" disabled={!file || !consent || busy || verifiedFacts.length === 0} onClick={() => void scanAndFill()}>
-          {busy ? "Scanning and filling…" : "Scan and fill this image →"}
-        </button>
-        {error && <p className="paper-error" role="alert">{error}</p>}
-        {message && <p className="paper-message" role="status">{message}</p>}
-      </section>
+        ))}
+      </nav>
 
-      {filledUrl && (
-        <section className="surface-card paper-result-card">
-          <div className="section-head"><div><p className="eyebrow">Review the result</p><h3>Your filled image</h3></div><span className="soft-badge">{placements.length} field(s) placed</span></div>
-          <img className="paper-result-image" src={filledUrl} alt="Filled paper form preview" />
-          <div className="paper-result-actions">
-            <a className="button primary" href={filledUrl} download={(file?.name || "form").replace(/\.[^.]+$/, "") + "-filled.jpg"}>Download filled image ↓</a>
-            <span>Original photo remains unchanged.</span>
+      {stage === "upload" && (
+        <section className="surface-card paper-upload-card">
+          <div className="section-head"><div><p className="eyebrow">Step 1 · Add your form</p><h3>Take a photo or choose an image</h3></div><span className="soft-badge">JPG · PNG · WebP</span></div>
+          <div className="paper-action-row">
+            <label className="button primary paper-choice">
+              <span>▣ Open camera</span>
+              <input type="file" accept="image/*" capture="environment" onChange={chooseImage} />
+            </label>
+            <label className="button paper-gallery paper-choice">
+              <span>▤ Choose from gallery</span>
+              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseImage} />
+            </label>
           </div>
-          <div className="paper-placement-list">
-            {placements.map((placement, index) => (
-              <div className="paper-placement-row" key={placement.factKey + "-" + index}>
-                <div><strong>{displayFactKey(placement.factKey)}</strong><small>{placement.label}</small></div>
-                <b>{placement.value}</b>
-                <span>{Math.round(placement.confidence * 100)}% model confidence</span>
-              </div>
-            ))}
-          </div>
-          <p className="inline-note"><span>ⓘ</span> Image placement is AI-assisted and can be imperfect. Check alignment, spelling and every value on the downloaded copy before printing, signing or submitting it.</p>
+          <p className="paper-guidance">Keep the entire page inside the frame. Photograph it from directly above, in good light, without shadows or blur.</p>
+          {originalUrl && (
+            <div className="paper-preview-block">
+              <div className="paper-preview-head"><strong>Original photo</strong><span>{file?.name}</span></div>
+              <img className="paper-preview-image" src={originalUrl} alt="Original paper form photo" />
+            </div>
+          )}
+          <label className="paper-consent">
+            <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
+            <span>I agree to send this photo and relevant approved profile values to Google Gemini through FormSaathi for form analysis. The processing route uses OCR and Gemini vision; it does not save the photo to my document vault.</span>
+          </label>
+          <button className="button primary paper-scan-button" disabled={!file || !consent || busy || verifiedFacts.length === 0} onClick={() => void scanAndFill()}>
+            {busy ? "Scanning and locating writing areas…" : "Scan this paper form →"}
+          </button>
+          {error && <p className="paper-error" role="alert">{error}</p>}
+          {message && <p className="paper-message" role="status">{message}</p>}
         </section>
       )}
-      <div className="security-callout"><strong>Important:</strong> The feature creates a new image, not an official digitally submitted form. It does not add signatures, certify documents or submit applications. Do not rely on automatic placement without reviewing the result.</div>
+
+      {stage === "review" && (
+        <section className="surface-card paper-result-card">
+          <div className="section-head">
+            <div><p className="eyebrow">Step 3 · Review before filling</p><h3>Check each suggested value</h3><p className="muted">Uncheck a value to leave that area blank. Editing a value here changes only this image, not your saved profile.</p></div>
+            <span className="soft-badge">{includedCount} of {placements.length} selected</span>
+          </div>
+          <div className="paper-review-grid">
+            <div className="paper-review-preview">
+              <div className="paper-preview-head"><strong>Live filled preview</strong><span>{renderingPreview ? "Updating…" : "Your edits appear here"}</span></div>
+              {previewUrl ? <img className="paper-result-image" src={previewUrl} alt="Live preview of reviewed paper form placements" /> : <p className="paper-guidance">Preparing the preview…</p>}
+            </div>
+            <div className="paper-placement-editor">
+              <div className="paper-placement-list">
+                {placements.map((placement, index) => (
+                  <article className={placement.included ? "paper-placement-row included" : "paper-placement-row excluded"} key={placement.factKey + "-" + index}>
+                    <label className="paper-placement-toggle">
+                      <input type="checkbox" checked={placement.included} onChange={(event) => updatePlacement(index, { included: event.target.checked })} aria-label={"Include " + displayFactKey(placement.factKey) + " in the filled copy"} />
+                      <span>{displayFactKey(placement.factKey)}</span>
+                    </label>
+                    <label className="paper-placement-value">
+                      <span>Value to place</span>
+                      <input type="text" value={placement.value} disabled={!placement.included} onChange={(event) => updatePlacement(index, { value: event.target.value })} aria-label={"Edit value for " + displayFactKey(placement.factKey)} />
+                    </label>
+                    <div className="paper-placement-meta">
+                      <span>{placement.label}</span>
+                      <span>{Math.round(placement.confidence * 100)}% placement confidence</span>
+                    </div>
+                    {placement.value !== placement.originalValue && (
+                      <button type="button" className="text-button paper-reset-value" onClick={() => updatePlacement(index, { value: placement.originalValue })}>Restore profile value</button>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </div>
+          </div>
+          {error && <p className="paper-error" role="alert">{error}</p>}
+          <div className="paper-result-actions">
+            <button type="button" className="button paper-gallery" onClick={() => setStage("upload")}>← Change photo</button>
+            <button type="button" className="button primary" disabled={includedCount === 0 || renderingPreview || busy} onClick={() => { setError(""); setStage("confirm"); }}>Continue to final check →</button>
+          </div>
+          <p className="inline-note"><span>ⓘ</span> Check the placement preview as well as the values. Gemini confidence is an estimate, not a guarantee that text is positioned correctly.</p>
+        </section>
+      )}
+
+      {stage === "confirm" && (
+        <section className="surface-card paper-stop-gate">
+          <div className="paper-stop-mark">STOP</div>
+          <p className="eyebrow">Step 4 · Human approval required</p>
+          <h3>Check everything before creating the final copy.</h3>
+          <p>Review the image and the {includedCount} selected value(s). FormSaathi will not create the downloadable copy until you approve. It will never submit this form to a government portal.</p>
+          {previewUrl && <img className="paper-result-image" src={previewUrl} alt="Final review before approval" />}
+          <div className="paper-stop-actions">
+            <button type="button" className="button paper-gallery" onClick={() => { setError(""); setStage("review"); }}>← Go back and fix</button>
+            <button type="button" className="button primary" disabled={busy || renderingPreview || !previewUrl} onClick={() => void approveAndCreateCopy()}>
+              {busy ? "Preparing approved copy…" : "I checked this. Create my copy →"}
+            </button>
+          </div>
+          {error && <p className="paper-error" role="alert">{error}</p>}
+        </section>
+      )}
+
+      {stage === "done" && filledUrl && (
+        <section className="surface-card paper-result-card">
+          <div className="section-head"><div><p className="eyebrow">Step 5 · Ready to download</p><h3>Your approved filled copy</h3></div><span className="soft-badge">{includedCount} field(s) included</span></div>
+          <img className="paper-result-image" src={filledUrl} alt="Approved filled paper form copy" />
+          <div className="paper-result-actions">
+            <a className="button primary" href={filledUrl} download={(file?.name || "form").replace(/\.[^.]+$/, "") + "-filled.jpg"}>Download filled image ↓</a>
+            <span>New copy created locally in your browser. Original photo remains unchanged.</span>
+          </div>
+          <p className="inline-note"><span>ⓘ</span> Review the downloaded image before printing or signing. Nothing was submitted or sent to the form issuer.</p>
+          <button type="button" className="button paper-gallery" onClick={resetScan}>Start another paper form</button>
+        </section>
+      )}
+
+      <div className="security-callout"><strong>Important:</strong> The final copy is an image, not an official digitally submitted form. Text placement can be imperfect. FormSaathi does not add signatures, certify documents, pay fees or submit applications. The human approval step is mandatory.</div>
     </div>
   );
 }
