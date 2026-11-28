@@ -56,7 +56,7 @@ app.use((request, response, next) => {
   // This is a browser-origin allowlist, not authentication: native clients can
   // forge Origin. Every /api route still verifies the Supabase bearer token.
   // Reject originless API calls while keeping /health usable by uptime probes.
-  if ((isApiRequest && !isAllowedOrigin(origin)) || (origin && !isAllowedOrigin(origin))) {
+  if ((isApiRequest && !isAllowedOrigin(origin, allowedOrigins)) || (origin && !isAllowedOrigin(origin, allowedOrigins))) {
     return response.status(403).json({
       error: isApiRequest
         ? "API requests must come from the Saral Form website or browser extension."
@@ -68,7 +68,7 @@ app.use((request, response, next) => {
 
 app.use(cors({
   origin(origin, callback) {
-    callback(null, Boolean(origin && isAllowedOrigin(origin)));
+    callback(null, Boolean(origin && isAllowedOrigin(origin, allowedOrigins)));
   },
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
