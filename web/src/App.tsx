@@ -511,23 +511,26 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
 
   async function approveSelectedFacts(selectedFacts: ExtractedFact[]) {
     if (selectedFacts.length === 0) return;
-    const uniqueByKey = new Map<string, ExtractedFact>();
+    const generalByKey = new Map<string, ExtractedFact>();
     const conflictingKeys = new Set<string>();
-    for (const fact of selectedFacts) {
-      const existing = uniqueByKey.get(fact.fact_key);
+    const documentSpecificFacts = selectedFacts.filter((fact) => !belongsInGeneralProfile(fact.fact_key));
+
+    for (const fact of selectedFacts.filter((item) => belongsInGeneralProfile(item.fact_key))) {
+      const existing = generalByKey.get(fact.fact_key);
       if (existing && existing.fact_value !== fact.fact_value) conflictingKeys.add(fact.fact_key);
-      else if (!existing) uniqueByKey.set(fact.fact_key, fact);
+      else if (!existing) generalByKey.set(fact.fact_key, fact);
     }
     if (conflictingKeys.size > 0) {
       setError(
-        "You selected different values for the same profile field: " +
+        "You selected different values for the same general profile field: " +
         Array.from(conflictingKeys).map(displayFactKey).join(", ") +
-        ". Choose one value for each field, then save the selection again."
+        ". Choose one value for each general field. Different document-specific values can remain attached to separate documents."
       );
       return;
     }
 
-    const replacements = Array.from(uniqueByKey.values()).filter((fact) => {
+    const generalFacts = Array.from(generalByKey.values());
+    const replacements = generalFacts.filter((fact) => {
       const current = profileFacts.find((item) => item.fact_key === fact.fact_key);
       return current && current.fact_value !== fact.fact_value;
     });
@@ -537,14 +540,13 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
       ).join("\n");
       const more = replacements.length > 6 ? "\n…and " + (replacements.length - 6) + " more" : "";
       if (!window.confirm(
-        "These selected values will replace existing profile values:\n\n" + summary + more + "\n\nContinue?"
+        "These selected values will replace existing general profile values:\n\n" + summary + more + "\n\nContinue?"
       )) return;
     }
 
     clearNotice();
     setBusy(true);
     try {
-      const generalFacts = Array.from(uniqueByKey.values()).filter((fact) => belongsInGeneralProfile(fact.fact_key));
       if (generalFacts.length) {
         const profileRows = generalFacts.map((fact) => ({
           user_id: user.id,
@@ -566,11 +568,14 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
         .in("id", selectedIds)
         .eq("review_status", "pending");
       if (reviewError) {
-        throw new Error("Profile values were saved, but their review status could not be updated. Refresh and check the profile before retrying.");
+        throw new Error("Some values may have been saved, but their review status could not be updated. Refresh and check the documents before retrying.");
       }
 
-      const documentOnlyCount = uniqueByKey.size - generalFacts.length;
-      setMessage("Approved " + uniqueByKey.size + " selected value(s): " + generalFacts.length + " added to general profile and " + documentOnlyCount + " kept with their source documents.");
+      setMessage(
+        "Approved " + selectedFacts.length + " value(s): " + generalFacts.length +
+        " saved to general information and " + documentSpecificFacts.length +
+        " kept separately with their source documents."
+      );
       await refreshData();
     } catch (reason) {
       setError(messageFor(reason));
