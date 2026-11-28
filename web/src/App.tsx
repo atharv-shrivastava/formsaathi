@@ -1637,7 +1637,7 @@ function ExtensionPage({ userEmail, verifiedFactCount }: { userEmail: string; ve
         <div className="extension-hero-copy">
           <p className="eyebrow">Saral Form for Chrome</p>
           <h2>Take your reviewed profile to the form.</h2>
-          <p>Saral Form can read the fields on the active page, match them against your approved information profile and let you review each suggested value before filling.</p>
+          <p>Saral Form can read fields on the active page and match them against your approved profile information and OCR-extracted values from documents you have scanned and approved. Review each suggested value before filling.</p>
           <a className="button primary extension-download" href={extensionPackageUrl}>Download Chrome extension <span>↓</span></a>
           <a className="text-button extension-release-link" href="https://github.com/atharv-shrivastava/formsaathi/releases" target="_blank" rel="noreferrer">View release notes ↗</a>
         </div>
