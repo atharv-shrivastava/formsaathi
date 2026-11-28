@@ -394,8 +394,8 @@ app.post(
 
     try {
       const [generalFacts, documentFacts] = await Promise.all([
-        loadVerifiedProfileFacts(request.formSaathiAccessToken),
-        loadApprovedDocumentFacts(request.formSaathiAccessToken)
+        loadVerifiedProfileFacts(request.formSaathiAccessToken).then((facts) => facts.map((fact) => ({ ...fact, sourceType: "general" }))),
+        loadApprovedDocumentFacts(request.formSaathiAccessToken).then((facts) => facts.map((fact) => ({ ...fact, sourceType: "document" })))
       ]);
       const generalRetrieved = retrieveProfileFactsForFields(fields, generalFacts);
       const documentRetrieved = retrieveProfileFactsForFields(fields, documentFacts);
