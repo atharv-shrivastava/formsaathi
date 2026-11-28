@@ -294,3 +294,51 @@ test("preserves OCR source filename through AI mapping validation", () => {
   assert.equal(mappings[0].sourceType, "document");
   assert.equal(mappings[0].sourceName, "Passport Scan.pdf");
 });
+
+
+test("keeps manual and OCR values together and rejects AI mapping when they conflict", () => {
+  const applicantField = {
+    id: "applicant-name-conflict",
+    label: "Applicant full name",
+    name: "applicant_name",
+    tagName: "input",
+    inputType: "text",
+    options: [],
+    isFile: false
+  };
+  const generalFact = {
+    id: "manual-name",
+    fact_key: "applicant_name",
+    fact_label: "Applicant Name",
+    fact_value: "Aarav Sharma",
+    sourceType: "general"
+  };
+  const ocrFact = {
+    id: "ocr-name",
+    fact_key: "applicant_name",
+    fact_label: "Applicant Name",
+    fact_value: "Aarav Kumar Sharma",
+    source_document_id: "identity-document",
+    sourceName: "Identity Certificate.pdf",
+    sourceType: "document"
+  };
+
+  const retrieved = retrieveApprovedFactsForFields(
+    [applicantField],
+    [generalFact],
+    [ocrFact]
+  );
+
+  assert.equal(retrieved[0].candidates.length, 2);
+  assert.deepEqual(
+    new Set(retrieved[0].candidates.map((candidate) => candidate.factValue)),
+    new Set(["Aarav Sharma", "Aarav Kumar Sharma"])
+  );
+
+  const mappings = validateAiMappings(
+    [{ fieldId: applicantField.id, factId: "manual-name", confidence: 0.99 }],
+    [applicantField],
+    retrieved
+  );
+  assert.deepEqual(mappings, []);
+});
