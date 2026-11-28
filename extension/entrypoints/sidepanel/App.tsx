@@ -22,7 +22,7 @@ const emptyScan: ScanResult = { title: "", url: "", fields: [] };
 
 function mergeAiMappings(
   rows: ReviewRow[],
-  mappings: Array<{ fieldId: string; factId: string; factKey: string; value: string; confidence: number }>
+  mappings: Array<{ fieldId: string; factId: string; factKey: string; value: string; confidence: number; sourceType?: "general" | "document" }>
 ): ReviewRow[] {
   const byField = new Map(mappings.map((mapping) => [mapping.fieldId, mapping]));
   return rows.map((row) => {
@@ -32,7 +32,8 @@ function mergeAiMappings(
       ...row,
       canonicalKey: suggestion.factKey,
       value: suggestion.value,
-      sourceName: "Verified FormSaathi profile",
+      sourceName: suggestion.sourceType === "document" ? "Document-specific information" : "General information",
+      sourceType: suggestion.sourceType || "general",
       sourceId: suggestion.factId,
       confidence: suggestion.confidence,
       evidence: "AI matched this field to the approved profile fact '" + suggestion.factKey + "'. The original stored value is shown; verify it before filling.",
