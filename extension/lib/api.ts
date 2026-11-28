@@ -22,6 +22,7 @@ export interface FormAnalysisMapping {
   confidence: number;
   sourceDocumentId: string | null;
   sourceType?: "general" | "document";
+  sourceName?: string | null;
   updatedAt: string | null;
 }
 
@@ -102,6 +103,44 @@ export async function requestFormAnalysis(
 
   if (!response.ok) throw new Error(await readError(response));
   return await response.json() as FormAnalysisResponse;
+}
+
+
+export interface AutofillFact {
+  id: string;
+  fact_key: string;
+  fact_label: string | null;
+  fact_value: string;
+  source_document_id?: string | null;
+  document_id?: string | null;
+  confidence: number | null;
+  evidence?: string | null;
+  sourceName?: string | null;
+  sourceType?: "general" | "document";
+  updated_at?: string | null;
+}
+
+export interface AutofillFactsResponse {
+  generalFacts: AutofillFact[];
+  documentFacts: AutofillFact[];
+  pendingDocumentFactCount: number;
+}
+
+export async function fetchAutofillFacts(accessToken: string): Promise<AutofillFactsResponse> {
+  if (!accessToken) throw new Error("Connect your Saral Form account before retrieving approved values.");
+  const response = await fetch(API_BASE + "/api/profile/autofill-facts", {
+    method: "GET",
+    headers: { Authorization: "Bearer " + accessToken }
+  });
+  if (!response.ok) throw new Error(await readError(response));
+  const payload = await response.json() as Partial<AutofillFactsResponse>;
+  return {
+    generalFacts: Array.isArray(payload.generalFacts) ? payload.generalFacts : [],
+    documentFacts: Array.isArray(payload.documentFacts) ? payload.documentFacts : [],
+    pendingDocumentFactCount: Number.isFinite(payload.pendingDocumentFactCount)
+      ? Number(payload.pendingDocumentFactCount)
+      : 0
+  };
 }
 
 export async function checkApi(): Promise<boolean> {
