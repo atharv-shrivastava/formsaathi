@@ -1627,13 +1627,13 @@ function EmptyState({ title, text }: { title: string; text: string }) {
 export default App;
 
 
-const extensionPackageUrl = "https://github.com/atharv-shrivastava/formsaathi/releases/download/extension-v0.1.0/FormSaathi-Chrome-Extension.zip";
+const extensionPackageUrl = "https://github.com/atharv-shrivastava/formsaathi/releases/download/extension-v0.1.0/Saral-Form-Chrome-Extension.zip";
 
 function ExtensionPage({ userEmail, verifiedFactCount }: { userEmail: string; verifiedFactCount: number }) {
   return (
     <div className="page-content">
       <section className="surface-card extension-hero">
-        <div className="extension-mark">FS</div>
+        <div className="extension-mark"><img src="/saral-form-favicon.png" alt="" /></div>
         <div className="extension-hero-copy">
           <p className="eyebrow">Saral Form for Chrome</p>
           <h2>Take your reviewed profile to the form.</h2>
