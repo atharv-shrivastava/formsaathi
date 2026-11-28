@@ -1669,3 +1669,12 @@ body {
     backdrop-filter: none;
   }
 }
+
+/* The browser-extension card uses the same official Saral Form symbol. */
+.extension-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
