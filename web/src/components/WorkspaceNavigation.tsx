@@ -55,7 +55,6 @@ export default function WorkspaceNavigation({
     let removeHostListeners: (() => void) | undefined;
     let renderer: import("three").WebGLRenderer | undefined;
     let scene: import("three").Scene | undefined;
-    let navGroup: import("three").Group | undefined;
     const meshes = new Map<string, NavigationMesh>();
 
     const roundedShape = (THREE: typeof import("three"), width: number, height: number, radius: number) => {
@@ -115,8 +114,7 @@ export default function WorkspaceNavigation({
         const object = new THREE.Group();
         object.rotation.y = -0.045;
         world.add(object);
-        navGroup = object;
-
+        
         const spineMaterial = new THREE.MeshPhysicalMaterial({
           color: 0x8ca992,
           metalness: 0.38,
