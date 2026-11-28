@@ -21,3 +21,36 @@ test("extracts labelled candidate facts without treating them as verified", () =
   assert.equal(facts.find((fact) => fact.key === "ifsc_code")?.value, "ABCD0123456");
   assert.ok(facts.every((fact) => fact.confidence < 1));
 });
+
+
+test("removes leading salutations from extracted applicant and father names", () => {
+  const facts = extractCandidateFacts([
+    "Applicant Name: Mr. Atharv Shrivastava",
+    "Father's Name: Shri Shashi Shrivastava"
+  ].join("\n"));
+
+  assert.equal(facts.find((fact) => fact.key === "applicant_name")?.value, "Atharv Shrivastava");
+  assert.equal(facts.find((fact) => fact.key === "father_name")?.value, "Shashi Shrivastava");
+});
+
+test("does not strip title-like text embedded in a real name", () => {
+  const facts = extractCandidateFacts("Applicant Name: Mrinal Sharma");
+  assert.equal(facts.find((fact) => fact.key === "applicant_name")?.value, "Mrinal Sharma");
+});
+
+test("keeps father, mother and guardian names in separate fact fields", () => {
+  const facts = extractCandidateFacts([
+    "Father's Name: Mr. Rakesh Demo",
+    "Mother's Name: Mrs. Sunita Demo",
+    "Guardian Name: Dr. Jordan Demo",
+    "Parent Name: Shri Alex Demo"
+  ].join("\n"));
+
+  assert.equal(facts.find((fact) => fact.key === "father_name")?.value, "Rakesh Demo");
+  assert.equal(facts.find((fact) => fact.key === "mother_name")?.value, "Sunita Demo");
+  assert.equal(facts.filter((fact) => fact.key === "guardian_name").length, 2);
+  assert.deepEqual(
+    facts.filter((fact) => fact.key === "guardian_name").map((fact) => fact.value),
+    ["Jordan Demo", "Alex Demo"]
+  );
+});

@@ -31,24 +31,61 @@ function getLabel(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectEl
       .filter(Boolean).join(" ");
     if (text) return text;
   }
-  if (element.placeholder) return element.placeholder.trim();
+  if ((element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) && element.placeholder) {
+    return element.placeholder.trim();
+  }
+  const autocomplete = element.getAttribute("autocomplete");
+  if (autocomplete && autocomplete !== "off") return autocomplete.replace(/[_-]/g, " ");
+  const title = element.getAttribute("title");
+  if (title) return title.trim();
+  const dataLabel = element.getAttribute("data-label") || element.getAttribute("data-testid");
+  if (dataLabel) return dataLabel.replace(/[_-]/g, " ");
   if (element.name) return element.name.replace(/[_-]/g, " ");
   if (element.id) return element.id.replace(/[_-]/g, " ");
   const parentText = element.parentElement?.innerText?.trim().replace(/\s+/g, " ") || "";
   return parentText.slice(0, 100) || "Unlabelled field";
 }
 
+function isFeedbackTextarea(element: HTMLTextAreaElement): boolean {
+  const context = [
+    getLabel(element),
+    element.name,
+    element.id,
+    element.placeholder,
+    element.getAttribute("aria-label"),
+    element.getAttribute("aria-describedby")
+  ].filter(Boolean).join(" ");
+
+  return /\b(feedback|comments?|suggestions?|reviews?|complaints?|remarks?|testimonials?|bug reports?|report a problem|how can we improve|tell us what you think|share your thoughts)\b/i.test(context);
+}
+
+function collectOpenShadowElements(root: Document | ShadowRoot): HTMLElement[] {
+  const found = Array.from(root.querySelectorAll<HTMLElement>("input, textarea, select, [contenteditable='true'], [role='textbox']"));
+  for (const host of Array.from(root.querySelectorAll<HTMLElement>("*"))) {
+    if (host.shadowRoot) found.push(...collectOpenShadowElements(host.shadowRoot));
+  }
+  return found;
+}
+
 function scanPage(): ScanResult {
-  const selector = "input:not([type='hidden']):not([type='submit']):not([type='button']):not([type='reset']), textarea, select";
-  const elements = Array.from(document.querySelectorAll<HTMLElement>(selector))
-    .filter((element) => isVisible(element));
+  const elements = collectOpenShadowElements(document)
+    .filter((element) => {
+      if (!isVisible(element)) return false;
+      if ("disabled" in element && element.disabled) return false;
+      if ("readOnly" in element && element.readOnly) return false;
+      if (element instanceof HTMLInputElement && ["hidden", "password", "checkbox", "radio", "submit", "button", "reset", "image", "file"].includes(element.type)) return false;
+      if (element instanceof HTMLTextAreaElement && isFeedbackTextarea(element)) return false;
+      if (element.getAttribute("role") === "textbox" && !element.isContentEditable) return false;
+      if (element.getAttribute("aria-hidden") === "true") return false;
+      return true;
+    });
 
   const fields: PortalField[] = elements.map((element, index) => {
     const control = element as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
     const existing = element.getAttribute(KEY_ATTRIBUTE);
     const id = existing || ("fs-" + index + "-" + Math.random().toString(36).slice(2, 8));
     element.setAttribute(KEY_ATTRIBUTE, id);
-    const inputType = control instanceof HTMLInputElement ? control.type : element.tagName.toLowerCase();
+    const inputType = control instanceof HTMLInputElement ? control.type : element.isContentEditable ? "contenteditable" : element.tagName.toLowerCase();
     const options = control instanceof HTMLSelectElement
       ? Array.from(control.options).map((option) => option.text.trim()).filter(Boolean).slice(0, 30)
       : undefined;
@@ -61,12 +98,26 @@ function scanPage(): ScanResult {
       required: control.required || element.getAttribute("aria-required") === "true",
       placeholder: control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement ? control.placeholder : "",
       name: control.name || "",
+      autoComplete: control instanceof HTMLInputElement ? control.autocomplete : "",
       options,
-      isFile: inputType === "file"
+      isFile: inputType === "file",
+      isContentEditable: element.isContentEditable
     };
   });
 
   return { title: document.title, url: location.href, fields };
+}
+
+function findKeyedElement(fieldId: string, root: Document | ShadowRoot = document): HTMLElement | null {
+  const direct = root.querySelector<HTMLElement>("[data-formsaathi-key=\"" + CSS.escape(fieldId) + "\"]");
+  if (direct) return direct;
+  for (const host of Array.from(root.querySelectorAll<HTMLElement>("*"))) {
+    if (host.shadowRoot) {
+      const nested = findKeyedElement(fieldId, host.shadowRoot);
+      if (nested) return nested;
+    }
+  }
+  return null;
 }
 
 function getOverlay(): ShadowRoot {
@@ -90,7 +141,7 @@ function clearHighlight(): void {
 }
 
 function highlightField(fieldId: string, label: string): boolean {
-  const element = document.querySelector<HTMLElement>("[" + KEY_ATTRIBUTE + "=\"" + CSS.escape(fieldId) + "\"]");
+  const element = findKeyedElement(fieldId);
   if (!element || !isVisible(element)) return false;
   clearHighlight();
   highlightedElement = element;
@@ -148,7 +199,7 @@ function highlightField(fieldId: string, label: string): boolean {
 }
 
 function fillField(fieldId: string, value: string): { ok: boolean; message: string } {
-  const element = document.querySelector<HTMLElement>("[" + KEY_ATTRIBUTE + "=\"" + CSS.escape(fieldId) + "\"]");
+  const element = findKeyedElement(fieldId);
   if (!element || !isVisible(element)) return { ok: false, message: "The field is no longer available. Scan the page again." };
   if (element instanceof HTMLInputElement) {
     if (["file", "password", "hidden", "submit", "button", "reset", "checkbox", "radio", "image"].includes(element.type) || element.disabled || element.readOnly) {
@@ -169,22 +220,40 @@ function fillField(fieldId: string, value: string): { ok: boolean; message: stri
     if (!match) return { ok: false, message: "No exact dropdown option matched. Select it manually." };
     const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set;
     setter?.call(element, match.value);
+  } else if (element.isContentEditable) {
+    if (element.getAttribute("aria-readonly") === "true") return { ok: false, message: "This field cannot be edited." };
+    element.textContent = value;
   } else {
     return { ok: false, message: "This control is not supported for autofill." };
   }
   element.dispatchEvent(new Event("input", { bubbles: true }));
   element.dispatchEvent(new Event("change", { bubbles: true }));
+  element.dispatchEvent(new Event("blur", { bubbles: true }));
   return { ok: true, message: "Value entered. Review it on the portal before continuing." };
 }
 
 export default defineContentScript({
   matches: ["http://*/*", "https://*/*", "file:///*"],
   runAt: "document_idle",
+  allFrames: true,
   main() {
     chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
       if (message.type === "FS_SCAN") {
-        sendResponse({ ok: true, result: scanPage() });
-        return false;
+        // Let client-rendered forms and delayed portal widgets finish mounting.
+        void (async () => {
+          try {
+            let result = scanPage();
+            // Modern portals often mount their form after hydration or an API call.
+            for (let attempt = 0; attempt < 5 && result.fields.length === 0; attempt += 1) {
+              await new Promise((resolve) => window.setTimeout(resolve, 250));
+              result = scanPage();
+            }
+            sendResponse({ ok: true, result });
+          } catch (error) {
+            sendResponse({ ok: false, error: error instanceof Error ? error.message : "Could not scan this frame." });
+          }
+        })();
+        return true;
       }
       if (message.type === "FS_HIGHLIGHT") {
         sendResponse({ ok: highlightField(message.fieldId, message.label) });

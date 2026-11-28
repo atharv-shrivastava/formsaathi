@@ -1,24 +1,50 @@
-import type { CandidateFact, StoredDocument } from "./types";
+import type { CandidateFact, ScanResult, StoredDocument } from "./types";
 
-export const API_BASE = "http://127.0.0.1:8787";
+// All packaged-extension requests use the authenticated hosted FormSaathi API.
+// Do not point the published extension at a developer's loopback address.
+export const API_BASE = "https://formsaathi-ocr-api.onrender.com";
+export const FORM_ANALYSIS_API_BASE = API_BASE;
 
 async function readError(response: Response): Promise<string> {
   try {
     const body = await response.json() as { error?: string };
-    return body.error || "Local service request failed.";
+    return body.error || "FormSaathi service request failed.";
   } catch {
-    return "Local service request failed (" + response.status + ").";
+    return "FormSaathi service request failed (" + response.status + ").";
   }
 }
 
-export async function extractDocument(document: StoredDocument): Promise<{
+export interface FormAnalysisMapping {
+  fieldId: string;
+  factId: string;
+  factKey: string;
+  value: string;
+  confidence: number;
+  sourceDocumentId: string | null;
+  sourceType?: "general" | "document";
+  sourceName?: string | null;
+  updatedAt: string | null;
+}
+
+export interface FormAnalysisResponse {
+  mappings: FormAnalysisMapping[];
+  aiUsed: boolean;
+  fieldCount: number;
+  matchedCount?: number;
+  model?: string;
+  note: string;
+}
+
+export async function extractDocument(document: StoredDocument, accessToken: string): Promise<{
   text: string;
   facts: CandidateFact[];
 }> {
+  if (!accessToken) throw new Error("Connect your FormSaathi account before processing a document.");
   const form = new FormData();
   form.append("file", document.file, document.name);
   const response = await fetch(API_BASE + "/api/ocr", {
     method: "POST",
+    headers: { Authorization: "Bearer " + accessToken },
     body: form
   });
   if (!response.ok) throw new Error(await readError(response));
@@ -26,13 +52,14 @@ export async function extractDocument(document: StoredDocument): Promise<{
   return { text: result.text, facts: result.facts || [] };
 }
 
-
 export async function prepareImage(
   document: StoredDocument,
   maxKb: number,
   width: number,
-  height: number
+  height: number,
+  accessToken: string
 ): Promise<{ blob: Blob; bytes: number; width: number; height: number }> {
+  if (!accessToken) throw new Error("Connect your FormSaathi account before preparing an image.");
   const form = new FormData();
   form.append("file", document.file, document.name);
   form.append("maxKb", String(maxKb));
@@ -41,6 +68,7 @@ export async function prepareImage(
 
   const response = await fetch(API_BASE + "/api/prepare-image", {
     method: "POST",
+    headers: { Authorization: "Bearer " + accessToken },
     body: form
   });
   if (!response.ok) throw new Error(await readError(response));
@@ -53,19 +81,74 @@ export async function prepareImage(
   };
 }
 
-export async function requestAiMappings(fields: unknown[], facts: CandidateFact[]) {
-  const response = await fetch(API_BASE + "/api/ai/map", {
+export async function requestFormAnalysis(
+  scan: ScanResult,
+  accessToken: string
+): Promise<FormAnalysisResponse> {
+  if (!accessToken) throw new Error("Connect your FormSaathi account before using AI form analysis.");
+
+  const response = await fetch(FORM_ANALYSIS_API_BASE + "/api/forms/analyze", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ consent: true, fields, facts })
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + accessToken
+    },
+    body: JSON.stringify({
+      consent: true,
+      pageTitle: scan.title.slice(0, 160),
+      // Deliberately send field descriptors only. Never send what the applicant typed.
+      fields: scan.fields
+    })
+  });
+
+  if (!response.ok) throw new Error(await readError(response));
+  return await response.json() as FormAnalysisResponse;
+}
+
+
+export interface AutofillFact {
+  id: string;
+  fact_key: string;
+  fact_label: string | null;
+  fact_value: string;
+  source_document_id?: string | null;
+  document_id?: string | null;
+  confidence: number | null;
+  evidence?: string | null;
+  sourceName?: string | null;
+  sourceType?: "general" | "document";
+  updated_at?: string | null;
+}
+
+export interface AutofillFactsResponse {
+  generalFacts: AutofillFact[];
+  documentFacts: AutofillFact[];
+  pendingDocumentFactCount: number;
+}
+
+export async function fetchAutofillFacts(accessToken: string): Promise<AutofillFactsResponse> {
+  if (!accessToken) throw new Error("Connect your Saral Form account before retrieving approved values.");
+  const response = await fetch(API_BASE + "/api/profile/autofill-facts", {
+    method: "GET",
+    headers: { Authorization: "Bearer " + accessToken }
   });
   if (!response.ok) throw new Error(await readError(response));
-  return response.json() as Promise<{ mappings: Array<{ fieldId: string; factKey: string; value: string; confidence: number }> }>;
+  const payload = await response.json() as Partial<AutofillFactsResponse>;
+  return {
+    generalFacts: Array.isArray(payload.generalFacts) ? payload.generalFacts : [],
+    documentFacts: Array.isArray(payload.documentFacts) ? payload.documentFacts : [],
+    pendingDocumentFactCount: Number.isFinite(payload.pendingDocumentFactCount)
+      ? Number(payload.pendingDocumentFactCount)
+      : 0
+  };
 }
 
 export async function checkApi(): Promise<boolean> {
   try {
-    const response = await fetch(API_BASE + "/health", { method: "GET" });
+    const response = await fetch(API_BASE + "/health", {
+      method: "GET",
+      signal: AbortSignal.timeout(8000)
+    });
     return response.ok;
   } catch {
     return false;

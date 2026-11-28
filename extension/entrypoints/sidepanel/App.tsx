@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { checkApi, extractDocument, prepareImage as requestImagePreparation, requestAiMappings } from "../../lib/api";
+import type { FormEvent } from "react";
+import { disconnectExtensionAccount, getExtensionAccount, getExtensionSession, signInExtensionAccount, type ExtensionAccount } from "../../lib/account";
+import { checkApi, extractDocument, fetchAutofillFacts, prepareImage as requestImagePreparation, requestFormAnalysis } from "../../lib/api";
 import { deleteDocument, listDocuments, saveDocument } from "../../lib/db";
 import { canonicalFieldKey, categoryForKey, createReviewRows, inferDocumentCategory, retrieveRelevantDocuments } from "../../lib/mapping";
 import type { CandidateFact, DocumentCategory, ReviewRow, ScanResult, StoredDocument } from "../../lib/types";
@@ -18,7 +20,38 @@ const categories: Array<{ value: DocumentCategory; label: string }> = [
 
 const emptyScan: ScanResult = { title: "", url: "", fields: [] };
 
+function mergeAiMappings(
+  rows: ReviewRow[],
+  mappings: Array<{ fieldId: string; factId: string; factKey: string; value: string; confidence: number; sourceType?: "general" | "document"; sourceName?: string | null }>
+): ReviewRow[] {
+  const byField = new Map(mappings.map((mapping) => [mapping.fieldId, mapping]));
+  return rows.map((row) => {
+    const suggestion = byField.get(row.field.id);
+    if (!suggestion || row.status === "conflict" || row.status === "filled" || row.value.trim()) return row;
+    return {
+      ...row,
+      canonicalKey: suggestion.factKey,
+      value: suggestion.value,
+      sourceName: suggestion.sourceName || (suggestion.sourceType === "document" ? "Document-specific information" : "General information"),
+      sourceType: suggestion.sourceType || "general",
+      sourceId: suggestion.factId,
+      confidence: suggestion.confidence,
+      evidence: suggestion.sourceName
+        ? "AI matched this field to an approved value stored from " + suggestion.sourceName + ". Verify it before filling."
+        : "AI matched this field to the approved Saral Form fact '" + suggestion.factKey + "'. Verify it before filling.",
+      status: "needs-review"
+    };
+  });
+}
+
+
 export default function App() {
+  const [account, setAccount] = useState<ExtensionAccount | null>(null);
+  const [accountLoading, setAccountLoading] = useState(true);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authError, setAuthError] = useState("");
   const [documents, setDocuments] = useState<StoredDocument[]>([]);
   const [category, setCategory] = useState<DocumentCategory>("identity");
   const [scan, setScan] = useState<ScanResult>(emptyScan);
@@ -31,15 +64,51 @@ export default function App() {
   const [maxWidth, setMaxWidth] = useState(300);
   const [maxHeight, setMaxHeight] = useState(300);
   const [preparingId, setPreparingId] = useState<string | null>(null);
+  const [reprocessingId, setReprocessingId] = useState<string | null>(null);
 
   const reloadDocuments = async () => setDocuments(await listDocuments());
 
   useEffect(() => {
     void reloadDocuments();
+    void getExtensionAccount()
+      .then(setAccount)
+      .catch((error) => setAuthError(error instanceof Error ? error.message : "Could not restore account connection."))
+      .finally(() => setAccountLoading(false));
     void checkApi().then(setApiReady);
     const timer = window.setInterval(() => void checkApi().then(setApiReady), 8000);
     return () => window.clearInterval(timer);
   }, []);
+
+  async function handleConnect(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAuthBusy(true);
+    setAuthError("");
+    try {
+      const connected = await signInExtensionAccount(authEmail, authPassword);
+      setAccount(connected);
+      setAuthPassword("");
+      setStatus("Connected to your Saral Form account. Approved profile and scanned-document facts are ready for matching.");
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Could not connect your Saral Form account.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
+
+  async function handleDisconnect() {
+    setAuthBusy(true);
+    setAuthError("");
+    try {
+      await disconnectExtensionAccount();
+      setAccount(null);
+      setRows([]);
+      setStatus("Saral Form account disconnected from this extension.");
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Could not disconnect the account.");
+    } finally {
+      setAuthBusy(false);
+    }
+  }
 
   const groupedCount = useMemo(() => categories.map((item) => ({
     ...item,
@@ -50,8 +119,8 @@ export default function App() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
-    if (!file.type.startsWith("image/") && file.type !== "application/pdf") {
-      setStatus("Use a PDF or image file.");
+    if (!["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setStatus("Use a PDF, JPEG, PNG or WebP file.");
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -91,13 +160,15 @@ export default function App() {
       return;
     }
     if (!apiReady) {
-      setStatus("Start the local service before preparing images: npm run dev:server.");
+      setStatus("The hosted Saral Form service is unavailable. Check your connection and retry.");
       return;
     }
     setPreparingId(document.id);
     setStatus("Preparing a JPEG copy. Your original vault document will remain unchanged.");
     try {
-      const result = await requestImagePreparation(document, maxKb, maxWidth, maxHeight);
+      const session = await getExtensionSession();
+      if (!session) throw new Error("Connect your Saral Form account before preparing an image.");
+      const result = await requestImagePreparation(document, maxKb, maxWidth, maxHeight, session.access_token);
       const url = URL.createObjectURL(result.blob);
       const anchor = window.document.createElement("a");
       anchor.href = url;
@@ -109,6 +180,52 @@ export default function App() {
       setStatus(error instanceof Error ? error.message : "Could not prepare this image.");
     } finally {
       setPreparingId(null);
+    }
+  }
+
+
+  async function rerunDocumentOcr(document: StoredDocument) {
+    if (!account) {
+      setStatus("Connect your Saral Form account before running document OCR.");
+      return;
+    }
+    if (!apiReady) {
+      setStatus("The hosted Saral Form OCR service is unavailable. Check your connection and retry.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Saral Form will send " + document.name +
+      " from this browser's local vault to the hosted OCR processor again. The previous local OCR cache will be replaced only after the new request succeeds. Continue?"
+    );
+    if (!confirmed) return;
+
+    setReprocessingId(document.id);
+    setStatus("Re-running OCR for " + document.name + "…");
+    try {
+      const session = await getExtensionSession();
+      if (!session) throw new Error("Your Saral Form session expired. Connect your account again.");
+      const extracted = await extractDocument(document, session.access_token);
+      await saveDocument({
+        ...document,
+        cachedText: extracted.text,
+        cachedFacts: extracted.facts,
+        cachedAt: Date.now()
+      });
+      await reloadDocuments();
+      setStatus(
+        "OCR re-run completed for " + document.name + ". " +
+        extracted.facts.length + " candidate value(s) were detected. " +
+        "The refreshed values will be available during the next relevant form scan."
+      );
+    } catch (error) {
+      setStatus(
+        "Could not re-run OCR for " + document.name + ": " +
+        (error instanceof Error ? error.message : "Please retry.") +
+        " The previous OCR cache was kept."
+      );
+    } finally {
+      setReprocessingId(null);
     }
   }
 
@@ -124,41 +241,159 @@ export default function App() {
     setStatus("Inspecting visible form controls…");
     try {
       const tabId = await getActiveTabId();
-      const response = await chrome.tabs.sendMessage(tabId, { type: "FS_SCAN" }) as {
-        ok?: boolean;
-        result?: ScanResult;
-      };
-      if (!response?.ok || !response.result) {
-        throw new Error("FormSaathi could not inspect this page. It may be a restricted browser page or the content script may not be available.");
+      // Query every frame: many government portals put the actual form in an iframe.
+      const frames = await chrome.webNavigation.getAllFrames({ tabId }).catch(() => undefined);
+      const frameIds = frames?.map((frame) => frame.frameId) ?? [0];
+      const frameResults = await Promise.all(frameIds.map(async (frameId) => {
+        try {
+          const response = await chrome.tabs.sendMessage(tabId, { type: "FS_SCAN" }, { frameId }) as {
+            ok?: boolean;
+            result?: ScanResult;
+          };
+          if (!response?.ok || !response.result) return null;
+          return { frameId, result: response.result };
+        } catch {
+          return null;
+        }
+      }));
+      const successfulFrames = frameResults.filter((item): item is NonNullable<typeof item> => Boolean(item));
+      if (!successfulFrames.length) {
+        throw new Error("Saral Form could not reach this page. Reload the tab after installing the extension, then scan again. Browser-internal pages and some protected portals block extensions.");
       }
-      const nextScan = response.result;
+      const nextScan: ScanResult = {
+        title: successfulFrames[0]?.result.title || "Web form",
+        url: successfulFrames[0]?.result.url || "",
+        fields: successfulFrames.flatMap(({ frameId, result }) =>
+          result.fields.map((field) => ({ ...field, frameId }))
+        )
+      };
       setScan(nextScan);
+      if (nextScan.fields.length === 0) {
+        setRows([]);
+        setStatus("No visible form fields were found on this page.");
+        return;
+      }
 
       const relevantDocuments = retrieveRelevantDocuments(nextScan.fields, documents);
       const relevantCategories = Array.from(new Set(
         nextScan.fields.map(canonicalFieldKey).map(categoryForKey).filter(Boolean)
       ));
-      if (relevantDocuments.length === 0) {
-        setRows(createReviewRows(nextScan.fields, []));
-        setStatus("Found " + nextScan.fields.length + " visible controls. No uploaded document matched the detected requirements. Add the relevant document category.");
-        return;
+
+      const facts: Array<CandidateFact & { sourceId: string; sourceName: string }> = [];
+      let generalFactCount = 0;
+      let approvedOcrFactCount = 0;
+      let pendingOcrFactCount = 0;
+      if (account) {
+        const session = await getExtensionSession();
+        if (!session) throw new Error("Your Saral Form session expired. Connect your account again.");
+        const autofillData = await fetchAutofillFacts(session.access_token);
+        generalFactCount = autofillData.generalFacts.length;
+        approvedOcrFactCount = autofillData.documentFacts.length;
+        pendingOcrFactCount = autofillData.pendingDocumentFactCount;
+
+        for (const fact of autofillData.generalFacts) {
+          facts.push({
+            key: fact.fact_key,
+            value: fact.fact_value,
+            confidence: fact.confidence ?? 0.92,
+            evidence: fact.source_document_id
+              ? "Approved profile value extracted from " + (fact.sourceName || "an uploaded document") + "."
+              : "Reviewed and approved in your Saral Form information profile.",
+            sourceId: fact.id,
+            sourceName: fact.sourceName || "General information",
+            sourceType: "general"
+          });
+        }
+        for (const fact of autofillData.documentFacts) {
+          facts.push({
+            key: fact.fact_key,
+            value: fact.fact_value,
+            confidence: fact.confidence ?? 0.9,
+            evidence: fact.evidence || "Approved OCR-extracted value from an uploaded document.",
+            sourceId: fact.id,
+            sourceName: fact.sourceName || "Document-specific information",
+            sourceType: "document"
+          });
+        }
       }
 
-      if (!apiReady) throw new Error("The local OCR service is offline. Start it with npm run dev:server.");
-      setStatus("Retrieving " + relevantDocuments.length + " relevant document(s) from: " + relevantCategories.join(", ") + ". Unrelated documents are not sent for OCR.");
-      const facts: Array<CandidateFact & { sourceId: string; sourceName: string }> = [];
-      for (const document of relevantDocuments) {
-        let documentFacts = document.cachedFacts || [];
-        if (!document.cachedAt) {
-          const extracted = await extractDocument(document);
-          documentFacts = extracted.facts;
-          await saveDocument({ ...document, cachedText: extracted.text, cachedFacts: documentFacts, cachedAt: Date.now() });
+      let localDocumentCount = 0;
+      let documentOcrMessage = "";
+      if (relevantDocuments.length > 0) {
+        if (!apiReady) {
+          documentOcrMessage = " Hosted document OCR is unavailable; no document was uploaded.";
+        } else if (!account) {
+          documentOcrMessage = " Connect your Saral Form account to process selected browser-local documents.";
+        } else {
+          const cachedCount = relevantDocuments.filter((document) => Boolean(document.cachedAt)).length;
+          const uploadCount = relevantDocuments.length - cachedCount;
+          const approvedUpload = uploadCount === 0 || window.confirm(
+            "Saral Form will send " + uploadCount + " relevant document(s) from this browser's local vault to its hosted OCR processor on Render. Files are processed in memory and are not saved to the server's disk. Extracted values remain unverified until you review them. Continue?"
+          );
+
+          if (!approvedUpload) {
+            documentOcrMessage = " Document OCR was skipped because you declined this upload.";
+          } else {
+            const session = await getExtensionSession();
+            if (!session) throw new Error("Your Saral Form session expired. Connect your account again.");
+            setStatus("Processing " + relevantDocuments.length + " relevant document(s) through hosted Saral Form OCR: " + relevantCategories.join(", ") + ".");
+            for (const document of relevantDocuments) {
+              let documentFacts = document.cachedFacts || [];
+              if (!document.cachedAt) {
+                const extracted = await extractDocument(document, session.access_token);
+                documentFacts = extracted.facts;
+                await saveDocument({ ...document, cachedText: extracted.text, cachedFacts: documentFacts, cachedAt: Date.now() });
+              }
+              for (const fact of documentFacts) facts.push({ ...fact, sourceId: document.id, sourceName: document.name, sourceType: "document" });
+            }
+            localDocumentCount = relevantDocuments.length;
+            setDocuments(await listDocuments());
+          }
         }
-        for (const fact of documentFacts) facts.push({ ...fact, sourceId: document.id, sourceName: document.name });
       }
-      setDocuments(await listDocuments());
-      setRows(createReviewRows(nextScan.fields, facts));
-      setStatus("Detected " + nextScan.fields.length + " controls. OCR ran only on " + relevantDocuments.length + " document(s) in the required categories. Review every suggested value.");
+
+      const baseRows = createReviewRows(nextScan.fields, facts);
+      let finalRows = baseRows;
+      let aiMessage = "";
+
+      if (account) {
+        const consent = window.confirm(
+          "For AI form analysis, Saral Form sends every detected visible field descriptor from this scan (labels, names, placeholders, types and dropdown choices, up to 120 fields) to its backend. The backend retrieves a few likely approved profile facts per field using regex hints and text similarity, then sends the complete field list and those candidates to Google Gemini to choose matches. Values already typed into the form, cookies and original document files are not sent. Continue with this one-time AI analysis?"
+        );
+
+        if (consent) {
+          try {
+            setStatus("Sending field descriptions to the Saral Form backend for AI matching…");
+            const session = await getExtensionSession();
+            if (!session) throw new Error("Your Saral Form session expired. Connect your account again.");
+            const analysis = await requestFormAnalysis(nextScan, session.access_token);
+            finalRows = mergeAiMappings(baseRows, analysis.mappings);
+            aiMessage = analysis.note || (analysis.aiUsed ? "AI matching completed." : "No AI matches were found.");
+            if (analysis.aiUsed) {
+              aiMessage = analysis.matchedCount + " AI suggestion(s) returned by " + (analysis.model || "Gemini") + ". Review each value before filling.";
+            }
+          } catch (error) {
+            aiMessage = "AI analysis unavailable: " + (error instanceof Error ? error.message : "Please retry.");
+          }
+        } else {
+          aiMessage = "AI analysis was skipped. Deterministic matches are still available for review.";
+        }
+      } else {
+        aiMessage = "Connect your Saral Form account to send this scan to the hosted backend and use AI matching.";
+      }
+
+      setRows(finalRows);
+      const aiMatchedCount = finalRows.filter((row) => row.evidence?.startsWith("AI matched")).length;
+      const localOffline = documentOcrMessage;
+      setStatus(
+        "Detected " + nextScan.fields.length + " fields; loaded " +
+        generalFactCount + " approved general value(s) and " +
+        approvedOcrFactCount + " approved OCR-extracted document value(s); " +
+        pendingOcrFactCount + " OCR value(s) still awaiting review. " +
+        localDocumentCount + " browser-local document(s) processed by hosted OCR, and " +
+        aiMatchedCount + " AI match(es). " + aiMessage + localOffline +
+        (pendingOcrFactCount > 0 ? " Approve pending OCR values on the Saral Form website before autofilling them." : "")
+      );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not scan this page.");
     } finally {
@@ -169,7 +404,7 @@ export default function App() {
   async function highlight(row: ReviewRow) {
     try {
       const tabId = await getActiveTabId();
-      await chrome.tabs.sendMessage(tabId, { type: "FS_HIGHLIGHT", fieldId: row.field.id, label: row.field.label });
+      await chrome.tabs.sendMessage(tabId, { type: "FS_HIGHLIGHT", fieldId: row.field.id, label: row.field.label }, { frameId: row.field.frameId ?? 0 });
     } catch {
       setStatus("Could not highlight this field. Scan the page again.");
     }
@@ -177,6 +412,10 @@ export default function App() {
 
   async function approveFill(index: number) {
     const row = rows[index];
+    if (!row) {
+      setStatus("This field review is no longer available. Scan the page again.");
+      return;
+    }
     if (!row.value.trim()) {
       setStatus("Enter a value before approving this field.");
       return;
@@ -191,7 +430,7 @@ export default function App() {
         type: "FS_FILL",
         fieldId: row.field.id,
         value: row.value
-      }) as { ok?: boolean; message?: string };
+      }, { frameId: row.field.frameId ?? 0 }) as { ok?: boolean; message?: string };
       if (!response?.ok) throw new Error(response?.message || "The field could not be filled.");
       setRows((current) => current.map((item, itemIndex) =>
         itemIndex === index ? { ...item, status: "filled" } : item
@@ -202,6 +441,71 @@ export default function App() {
     }
   }
 
+  async function fillAllAvailable() {
+    const pendingRows = rows
+      .map((row, index) => ({ row, index }))
+      .filter(({ row }) =>
+        Boolean(row.value.trim()) &&
+        !row.field.isFile &&
+        row.status !== "filled" &&
+        row.status !== "conflict"
+      );
+
+    if (pendingRows.length === 0) {
+      setStatus("There are no available extracted values to fill. Resolve conflicts or review the scan first.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Saral Form is ready to fill " + pendingRows.length +
+      " field(s) using the values shown in this panel. Check the suggestions first. " +
+      "This may replace values already entered in those fields. Saral Form will not submit the form. Continue?"
+    );
+    if (!confirmed) return;
+
+    setBusy(true);
+    setStatus("Filling " + pendingRows.length + " field(s). Keep this page open…");
+    const filledIds = new Set<string>();
+    const failures: string[] = [];
+
+    try {
+      const tabId = await getActiveTabId();
+      for (const { row } of pendingRows) {
+        try {
+          const response = await chrome.tabs.sendMessage(tabId, {
+            type: "FS_FILL",
+            fieldId: row.field.id,
+            value: row.value
+          }, { frameId: row.field.frameId ?? 0 }) as { ok?: boolean; message?: string };
+
+          if (response?.ok) {
+            filledIds.add(row.field.id);
+          } else {
+            failures.push(row.field.label + ": " + (response?.message || "Could not fill this field."));
+          }
+        } catch (error) {
+          failures.push(row.field.label + ": " + (error instanceof Error ? error.message : "Could not reach this field."));
+        }
+      }
+
+      setRows((current) => current.map((row) =>
+        filledIds.has(row.field.id) ? { ...row, status: "filled" } : row
+      ));
+
+      const successCount = filledIds.size;
+      const failureCount = failures.length;
+      setStatus(
+        "Filled " + successCount + " of " + pendingRows.length + " available field(s)." +
+        (failureCount ? " " + failureCount + " field(s) could not be filled; review them individually." : " Review the completed fields before submitting the portal form.") +
+        " Saral Form did not submit the application."
+      );
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not fill the fields on this page.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function editValue(index: number, value: string) {
     setRows((current) => current.map((row, itemIndex) =>
       itemIndex === index ? { ...row, value, status: row.status === "filled" || row.status === "conflict" ? "needs-review" : row.status } : row
@@ -209,36 +513,30 @@ export default function App() {
   }
 
   async function tryAiMapping() {
-    if (!window.confirm("This sends only already-extracted candidate facts and detected field labels from relevant document categories to the configured Gemini API. Original documents are not sent. Continue?")) return;
+    if (!scan.fields.length) {
+      setStatus("Scan a form before requesting AI mapping.");
+      return;
+    }
+    if (!account) {
+      setStatus("Connect your Saral Form account before using backend AI mapping.");
+      return;
+    }
+    if (!window.confirm(
+      "This sends every detected visible field descriptor in the current scan (up to 120 fields), plus a small set of retrieved approved profile facts per field, to the Saral Form backend and Google Gemini. Values already typed into the form, cookies and original document files are not sent. Continue?"
+    )) return;
+
     setBusy(true);
-    setStatus("Requesting optional AI mapping…");
+    setStatus("Requesting AI mapping from the hosted Saral Form backend…");
     try {
-      const relevantDocuments = retrieveRelevantDocuments(scan.fields, documents);
-      const relevantIds = new Set(relevantDocuments.map((document) => document.id));
-      const facts = documents
-        .filter((document) => relevantIds.has(document.id))
-        .flatMap((document) => (document.cachedFacts || []).map((fact) => ({
-          ...fact,
-          sourceId: document.id,
-          sourceName: document.name
-        })));
-      if (!facts.length) throw new Error("No extracted facts from relevant documents are available to map.");
-      const response = await requestAiMappings(scan.fields, facts);
-      setRows((current) => current.map((row) => {
-        const suggestion = response.mappings.find((mapping) => mapping.fieldId === row.field.id);
-        if (!suggestion || row.value || row.status === "conflict") return row;
-        const source = facts.find((fact) => fact.key === suggestion.factKey && fact.value === suggestion.value);
-        return {
-          ...row,
-          value: suggestion.value,
-          canonicalKey: suggestion.factKey,
-          sourceName: source?.sourceName,
-          sourceId: source?.sourceId,
-          confidence: suggestion.confidence,
-          status: "needs-review"
-        };
-      }));
-      setStatus("AI suggestions received. They are unverified; check every value before filling.");
+      const session = await getExtensionSession();
+      if (!session) throw new Error("Your Saral Form session expired. Connect your account again.");
+      const analysis = await requestFormAnalysis(scan, session.access_token);
+      setRows((current) => mergeAiMappings(current, analysis.mappings));
+      setStatus(
+        analysis.aiUsed
+          ? (analysis.matchedCount || analysis.mappings.length) + " AI suggestion(s) received. Review every value before filling."
+          : analysis.note
+      );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "AI mapping is unavailable.");
     } finally {
@@ -247,22 +545,47 @@ export default function App() {
   }
 
   const filledCount = rows.filter((row) => row.status === "filled").length;
+  const fillableCount = rows.filter((row) =>
+    Boolean(row.value.trim()) &&
+    !row.field.isFile &&
+    row.status !== "filled" &&
+    row.status !== "conflict"
+  ).length;
 
   return (
     <main className="app-shell">
       <header className="brand-row">
         <div className="brand-block">
-          <div className="brand-mark">FS</div>
-          <div className="brand-name">FormSaathi</div>
+          <div className="brand-mark"><img src="/icons/saral-form-icon.png" alt="" /></div>
+          <div className="brand-name">Saral Form</div>
           <div className="brand-caption">Your form companion</div>
         </div>
         <div className={apiReady ? "service-pill online" : "service-pill offline"}>
-          <span /> OCR {apiReady ? "online" : "offline"}
+          <span /> Saral Form API {apiReady ? "online" : "offline"}
         </div>
       </header>
 
+      <section className="account-card" aria-label="Saral Form account connection">
+        {accountLoading ? <p className="account-muted">Checking your Saral Form account…</p> : account ? (
+          <div className="account-connected">
+            <div><strong>Account connected</strong><small>{account.email || "Signed in"}</small><small>Approved profile facts and OCR-extracted document values are available for form matching.</small></div>
+            <button type="button" className="account-disconnect" disabled={authBusy} onClick={() => void handleDisconnect()}>{authBusy ? "Please wait…" : "Disconnect"}</button>
+          </div>
+        ) : (
+          <form className="account-form" onSubmit={(event) => void handleConnect(event)}>
+            <div><strong>Connect your Saral Form account</strong><small>Use the same email and password as the web app.</small></div>
+            <input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="Email address" autoComplete="username" required />
+            <input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder="Password" autoComplete="current-password" required />
+            {authError && <p className="account-error" role="alert">{authError}</p>}
+            <button className="primary-button full" type="submit" disabled={authBusy}>{authBusy ? "Connecting…" : "Connect account"}</button>
+            <a className="account-link" href="https://formsaathi-web.vercel.app" target="_blank" rel="noreferrer">Open Saral Form website ↗</a>
+          </form>
+        )}
+        {account && authError && <p className="account-error" role="alert">{authError}</p>}
+      </section>
+
       <div className="privacy-note">
-        Files stay in this browser until a relevant form requires OCR. Only matching document categories are processed.
+        Approved general information and OCR-extracted values from documents scanned in the Saral Form website sync from your account. OCR candidates must be approved on the website before the extension can use them. Selected browser-local documents are a separate optional vault and are sent to hosted OCR only after confirmation. AI analysis sends detected field descriptors and approved fact candidates after your confirmation; typed form values, cookies and original files are not sent for webpage-form matching.
       </div>
 
       <nav className="tabs">
@@ -280,7 +603,7 @@ export default function App() {
             {categories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
           </select>
           <label className="upload-button">
-            <input type="file" accept="application/pdf,image/*" onChange={handleUpload} />
+            <input type="file" accept="application/pdf,image/jpeg,image/png,image/webp" onChange={handleUpload} />
             <span>＋ Add PDF or image</span>
           </label>
           <div className="prepare-settings">
@@ -313,6 +636,16 @@ export default function App() {
                     {categories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                   </select>
                   <small>{document.cachedAt ? "OCR cached locally" : "Not processed"}</small>
+                  <button
+                    type="button"
+                    className="text-button prepare-button"
+                    disabled={!apiReady || !account || reprocessingId === document.id}
+                    onClick={() => void rerunDocumentOcr(document)}
+                  >
+                    {reprocessingId === document.id
+                      ? "Re-running OCR…"
+                      : document.cachedAt ? "Re-run OCR" : "Run OCR now"}
+                  </button>
                   {document.mimeType.startsWith("image/") && (
                     <button className="text-button prepare-button" disabled={!apiReady || preparingId === document.id} onClick={() => void prepareDocumentImage(document)}>
                       {preparingId === document.id ? "Preparing…" : "Prepare JPEG copy"}
@@ -339,8 +672,17 @@ export default function App() {
             <>
               <div className="progress-row"><span>{filledCount} of {rows.length} fields filled</span><b>{Math.round((filledCount / rows.length) * 100)}%</b></div>
               <div className="progress-track"><div style={{ width: (filledCount / rows.length * 100) + "%" }} /></div>
-              <button className="secondary-button full" disabled={busy} onClick={() => void tryAiMapping()}>Ask AI for mapping suggestions</button>
-              <p className="muted small">Optional. Requires a Gemini key on the local service and sends extracted facts only after your confirmation.</p>
+              <button
+                type="button"
+                className="primary-button full bulk-fill-button"
+                disabled={busy || fillableCount === 0}
+                onClick={() => void fillAllAvailable()}
+              >
+                {busy ? "Working…" : fillableCount > 0 ? "Fill all available fields (" + fillableCount + ")" : "No fields ready to fill"}
+              </button>
+              <p className="muted small">Fills only fields with a value. File uploads, conflicts and already-filled fields are skipped. The application is never submitted.</p>
+              <button className="secondary-button full" disabled={busy} onClick={() => void tryAiMapping()}>Re-run AI form analysis</button>
+              <p className="muted small">Uses the hosted Saral Form backend and Gemini. Each AI request requires your confirmation.</p>
               <div className="mapping-list">
                 {rows.map((row, index) => (
                   <article className="mapping-card" key={row.field.id}>
@@ -373,7 +715,7 @@ export default function App() {
       )}
 
       <footer className="status-bar"><span className="status-dot" />{status}</footer>
-      <div className="footer-note">FormSaathi never submits an application for you.</div>
+      <div className="footer-note">Saral Form never submits an application for you.</div>
     </main>
   );
 }
