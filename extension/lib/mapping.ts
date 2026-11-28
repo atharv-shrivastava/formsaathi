@@ -148,10 +148,12 @@ export function createReviewRows(
 
     let candidates = facts.filter((fact) => normalizedFactKey(fact.key) === key);
     const documentSpecific = !generalProfileKeys.has(key);
-    const preferredScope = documentSpecific ? "document" : "general";
-    const scoped = candidates.filter((fact) => fact.sourceType === preferredScope);
-    if (scoped.length) candidates = scoped;
-    else if (documentSpecific) candidates = candidates.filter((fact) => fact.sourceType !== "general");
+    // General fields must consider both user-entered profile values and
+    // approved OCR values. If they disagree, createReviewRows marks a conflict
+    // instead of silently preferring the manually entered value.
+    if (documentSpecific) {
+      candidates = candidates.filter((fact) => fact.sourceType !== "general");
+    }
     if (!candidates.length && ["first_name", "middle_name", "last_name"].includes(key)) {
       candidates = facts.filter(isApplicantFullNameFact).map((fact) => ({
         ...fact,
