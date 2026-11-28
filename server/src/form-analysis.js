@@ -243,7 +243,8 @@ export function sanitizeDetectedFields(rawFields) {
     const tagName = String(raw.tagName || "").toLowerCase();
     const inputType = String(raw.inputType || tagName).toLowerCase().slice(0, 40);
     if (!id || !/^[a-zA-Z0-9_-]+$/.test(id) || seen.has(id)) continue;
-    if (!["input", "textarea", "select"].includes(tagName)) continue;
+    const isContentEditable = raw.isContentEditable === true && ["div", "span"].includes(tagName);
+    if (!["input", "textarea", "select"].includes(tagName) && !isContentEditable) continue;
     if (blockedInputTypes.has(inputType)) continue;
     if (isFeedbackTextarea(raw)) continue;
     seen.add(id);
@@ -263,7 +264,8 @@ export function sanitizeDetectedFields(rawFields) {
       placeholder: String(raw.placeholder || "").trim().slice(0, 160),
       name: String(raw.name || "").trim().slice(0, 120),
       options,
-      isFile: raw.isFile === true || inputType === "file"
+      isFile: raw.isFile === true || inputType === "file",
+      isContentEditable
     });
   }
 
