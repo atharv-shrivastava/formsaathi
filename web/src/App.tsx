@@ -1069,7 +1069,7 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
         )}
       </section>
       <section className="surface-card review-section">
-        <div className="section-head"><div><p className="eyebrow">Needs your review</p><h3>Extracted candidates</h3><p className="muted">Fields stay attached to their source document until you choose which values belong in your reusable profile.</p></div><span className={pendingFacts.length ? "review-count active" : "review-count"}>{pendingFacts.length} pending</span></div>
+        <div className="section-head"><div><p className="eyebrow">Needs your review</p><h3>Extracted candidates</h3><p className="muted">Approve reusable personal details into your general profile. Document identifiers and certificate-specific values remain attached to their source document.</p></div><span className={pendingFacts.length ? "review-count active" : "review-count"}>{pendingFacts.length} pending</span></div>
         {pendingFacts.length === 0 ? <EmptyState title="You're all caught up" text="New OCR results will appear here for your review." /> : (
           <>
             <div className="review-bulk-toolbar">
@@ -1080,7 +1080,7 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
                 disabled={busy}
               /><span>Select all detected fields</span></label>
               <button className="button primary candidate-bulk-save" disabled={busy || selectedFactIds.length === 0} onClick={() => onApproveSelected(pendingFacts.filter((fact) => selectedFactIds.includes(fact.id)))}>
-                Save {selectedFactIds.length ? selectedFactIds.length + " selected" : "selected"} to profile
+                Approve {selectedFactIds.length ? selectedFactIds.length + " selected" : "selected"}
               </button>
             </div>
             <div className="candidate-document-groups">
