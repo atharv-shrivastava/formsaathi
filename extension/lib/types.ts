@@ -13,6 +13,7 @@ export interface CandidateFact {
   value: string;
   confidence: number;
   evidence: string;
+  sourceType?: "general" | "document";
 }
 
 export interface StoredDocument {
