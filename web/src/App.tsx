@@ -789,6 +789,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
                 <ProfilePage
                   verifiedFacts={verifiedFacts}
                   pendingFacts={pendingFacts}
+                  approvedDocumentFacts={facts.filter((fact) => fact.review_status === "approved" && !belongsInGeneralProfile(fact.fact_key))}
                   documents={documents}
                   onApprove={approveFact}
                   onApproveSelected={approveSelectedFacts}
@@ -966,9 +967,10 @@ function DocumentsPage({
   );
 }
 
-function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onApproveSelected, onReject, onUpdate, onManualSave, busy }: {
+function ProfilePage({ verifiedFacts, pendingFacts, approvedDocumentFacts, documents, onApprove, onApproveSelected, onReject, onUpdate, onManualSave, busy }: {
   verifiedFacts: ProfileFact[];
   pendingFacts: ExtractedFact[];
+  approvedDocumentFacts: ExtractedFact[];
   documents: UserDocument[];
   onApprove: (fact: ExtractedFact) => void;
   onApproveSelected: (facts: ExtractedFact[]) => void;
@@ -1065,6 +1067,28 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
           <div className="fact-grid">{verifiedFacts.map((fact) => (
             <div className="fact-card" key={fact.id}><div className="fact-label">{fact.fact_label || displayFactKey(fact.fact_key)} <span className="verified-dot">✓ Reviewed</span></div><strong>{fact.fact_value}</strong><small>Source: {fact.source_document_id ? docName(fact.source_document_id) : "Manually added"}</small></div>
           ))}</div>
+        )}
+      </section>
+      <section className="surface-card profile-section">
+        <div className="section-head"><div><p className="eyebrow">Stored with source documents</p><h3>Document-specific information</h3><p className="muted">Identifiers, certificate details and academic records stay linked to the document they came from.</p></div><span className="soft-badge">{approvedDocumentFacts.length} approved</span></div>
+        {approvedDocumentFacts.length === 0 ? <EmptyState title="No document-specific values approved yet" text="Approve a certificate number, identity number or other document-only field to keep it here." /> : (
+          <div className="candidate-document-groups">
+            {Object.entries(approvedDocumentFacts.reduce<Record<string, ExtractedFact[]>>((groups, fact) => {
+              (groups[fact.document_id] ||= []).push(fact);
+              return groups;
+            }, {})).map(([documentId, groupFacts]) => (
+              <section className="candidate-document-group" key={documentId}>
+                <div className="candidate-document-heading"><div><strong>{documents.find((document) => document.id === documentId)?.document_type || documents.find((document) => document.id === documentId)?.filename || "Source document"}</strong><small>{documents.find((document) => document.id === documentId)?.filename || "Document"} · {groupFacts.length} approved value(s)</small></div></div>
+                <div className="candidate-list">
+                  {groupFacts.map((fact) => (
+                    <article className="candidate-row" key={fact.id}>
+                      <div className="candidate-main"><div className="candidate-label">{fact.fact_label || displayFactKey(fact.fact_key)}</div><strong>{fact.fact_value}</strong><small>✓ Approved · retained in this document's record</small></div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
         )}
       </section>
       <section className="surface-card review-section">
