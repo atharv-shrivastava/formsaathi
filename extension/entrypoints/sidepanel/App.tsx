@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { disconnectExtensionAccount, getApprovedDocumentFacts, getExtensionAccount, getExtensionSession, getVerifiedProfileFacts, signInExtensionAccount, type ExtensionAccount } from "../../lib/account";
-import { checkApi, extractDocument, prepareImage as requestImagePreparation, requestFormAnalysis } from "../../lib/api";
+import { disconnectExtensionAccount, getExtensionAccount, getExtensionSession, signInExtensionAccount, type ExtensionAccount } from "../../lib/account";
+import { checkApi, extractDocument, fetchAutofillFacts, prepareImage as requestImagePreparation, requestFormAnalysis } from "../../lib/api";
 import { deleteDocument, listDocuments, saveDocument } from "../../lib/db";
 import { canonicalFieldKey, categoryForKey, createReviewRows, inferDocumentCategory, retrieveRelevantDocuments } from "../../lib/mapping";
 import type { CandidateFact, DocumentCategory, ReviewRow, ScanResult, StoredDocument } from "../../lib/types";
@@ -22,7 +22,7 @@ const emptyScan: ScanResult = { title: "", url: "", fields: [] };
 
 function mergeAiMappings(
   rows: ReviewRow[],
-  mappings: Array<{ fieldId: string; factId: string; factKey: string; value: string; confidence: number; sourceType?: "general" | "document" }>
+  mappings: Array<{ fieldId: string; factId: string; factKey: string; value: string; confidence: number; sourceType?: "general" | "document"; sourceName?: string | null }>
 ): ReviewRow[] {
   const byField = new Map(mappings.map((mapping) => [mapping.fieldId, mapping]));
   return rows.map((row) => {
@@ -32,11 +32,13 @@ function mergeAiMappings(
       ...row,
       canonicalKey: suggestion.factKey,
       value: suggestion.value,
-      sourceName: suggestion.sourceType === "document" ? "Document-specific information" : "General information",
+      sourceName: suggestion.sourceName || (suggestion.sourceType === "document" ? "Document-specific information" : "General information"),
       sourceType: suggestion.sourceType || "general",
       sourceId: suggestion.factId,
       confidence: suggestion.confidence,
-      evidence: "AI matched this field to the approved profile fact '" + suggestion.factKey + "'. The original stored value is shown; verify it before filling.",
+      evidence: suggestion.sourceName
+        ? "AI matched this field to an approved value stored from " + suggestion.sourceName + ". Verify it before filling."
+        : "AI matched this field to the approved Saral Form fact '" + suggestion.factKey + "'. Verify it before filling.",
       status: "needs-review"
     };
   });
@@ -84,7 +86,7 @@ export default function App() {
       const connected = await signInExtensionAccount(authEmail, authPassword);
       setAccount(connected);
       setAuthPassword("");
-      setStatus("Connected to your Saral Form account. Reviewed profile facts are ready for matching.");
+      setStatus("Connected to your Saral Form account. Approved profile and scanned-document facts are ready for matching.");
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Could not connect your Saral Form account.");
     } finally {
@@ -231,30 +233,38 @@ export default function App() {
       ));
 
       const facts: Array<CandidateFact & { sourceId: string; sourceName: string }> = [];
-      let cloudFactCount = 0;
+      let generalFactCount = 0;
+      let approvedOcrFactCount = 0;
+      let pendingOcrFactCount = 0;
       if (account) {
-        const cloudFacts = await getVerifiedProfileFacts();
-        cloudFactCount = cloudFacts.length;
-        for (const fact of cloudFacts) {
+        const session = await getExtensionSession();
+        if (!session) throw new Error("Your Saral Form session expired. Connect your account again.");
+        const autofillData = await fetchAutofillFacts(session.access_token);
+        generalFactCount = autofillData.generalFacts.length;
+        approvedOcrFactCount = autofillData.documentFacts.length;
+        pendingOcrFactCount = autofillData.pendingDocumentFactCount;
+
+        for (const fact of autofillData.generalFacts) {
           facts.push({
             key: fact.fact_key,
             value: fact.fact_value,
             confidence: fact.confidence ?? 0.92,
-            evidence: "Reviewed and approved in your Saral Form information profile.",
+            evidence: fact.source_document_id
+              ? "Approved profile value extracted from " + (fact.sourceName || "an uploaded document") + "."
+              : "Reviewed and approved in your Saral Form information profile.",
             sourceId: fact.id,
-            sourceName: "General information",
+            sourceName: fact.sourceName || "General information",
             sourceType: "general"
           });
         }
-        const documentFacts = await getApprovedDocumentFacts();
-        for (const fact of documentFacts) {
+        for (const fact of autofillData.documentFacts) {
           facts.push({
             key: fact.fact_key,
             value: fact.fact_value,
             confidence: fact.confidence ?? 0.9,
-            evidence: fact.evidence || "Approved value extracted from a specific uploaded document.",
+            evidence: fact.evidence || "Approved OCR-extracted value from an uploaded document.",
             sourceId: fact.id,
-            sourceName: "Document-specific information",
+            sourceName: fact.sourceName || "Document-specific information",
             sourceType: "document"
           });
         }
@@ -329,10 +339,13 @@ export default function App() {
       const aiMatchedCount = finalRows.filter((row) => row.evidence?.startsWith("AI matched")).length;
       const localOffline = documentOcrMessage;
       setStatus(
-        "Detected " + nextScan.fields.length + " fields; " +
-        cloudFactCount + " direct verified-profile match(es), " +
+        "Detected " + nextScan.fields.length + " fields; loaded " +
+        generalFactCount + " approved general value(s) and " +
+        approvedOcrFactCount + " approved OCR-extracted document value(s); " +
+        pendingOcrFactCount + " OCR value(s) still awaiting review. " +
         localDocumentCount + " browser-local document(s) processed by hosted OCR, and " +
-        aiMatchedCount + " AI match(es). " + aiMessage + localOffline
+        aiMatchedCount + " AI match(es). " + aiMessage + localOffline +
+        (pendingOcrFactCount > 0 ? " Approve pending OCR values on the Saral Form website before autofilling them." : "")
       );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not scan this page.");
@@ -508,7 +521,7 @@ export default function App() {
       <section className="account-card" aria-label="Saral Form account connection">
         {accountLoading ? <p className="account-muted">Checking your Saral Form account…</p> : account ? (
           <div className="account-connected">
-            <div><strong>Account connected</strong><small>{account.email || "Signed in"}</small><small>Approved profile facts are available for form matching.</small></div>
+            <div><strong>Account connected</strong><small>{account.email || "Signed in"}</small><small>Approved profile facts and OCR-extracted document values are available for form matching.</small></div>
             <button type="button" className="account-disconnect" disabled={authBusy} onClick={() => void handleDisconnect()}>{authBusy ? "Please wait…" : "Disconnect"}</button>
           </div>
         ) : (
@@ -525,7 +538,7 @@ export default function App() {
       </section>
 
       <div className="privacy-note">
-        Your approved profile facts sync from Saral Form. Selected local documents are sent to hosted OCR only after a separate confirmation. AI analysis sends the complete detected field-descriptor list (up to 120 fields) and only the retrieved approved-fact candidates per field after your confirmation; typed form values, cookies and original files are not sent to Gemini for webpage-form matching.
+        Approved general information and OCR-extracted values from documents scanned in the Saral Form website sync from your account. OCR candidates must be approved on the website before the extension can use them. Selected browser-local documents are a separate optional vault and are sent to hosted OCR only after confirmation. AI analysis sends detected field descriptors and approved fact candidates after your confirmation; typed form values, cookies and original files are not sent for webpage-form matching.
       </div>
 
       <nav className="tabs">
