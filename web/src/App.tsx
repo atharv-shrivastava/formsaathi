@@ -44,15 +44,17 @@ const pageTitles: Record<Page, { title: string; subtitle: string }> = {
   privacy: { title: "Privacy centre", subtitle: "See how your information is stored and control your data." }
 };
 
-const documentSpecificFactKeys = new Set([
-  "aadhaar_number", "pan_number", "certificate_number", "document_number",
-  "roll_number", "registration_number", "enrolment_number", "issue_date",
-  "expiry_date", "passing_year", "percentage", "cgpa", "sgpa",
-  "marks_obtained", "total_marks", "board_name", "school_name"
+const generalProfileFactKeys = new Set([
+  "applicant_name", "full_name", "first_name", "middle_name", "last_name",
+  "father_name", "mother_name", "guardian_name", "date_of_birth",
+  "email", "email_address", "phone", "phone_number", "mobile_number",
+  "address", "permanent_address", "correspondence_address", "city", "state",
+  "pincode", "postal_code", "nationality", "religion", "caste",
+  "annual_income", "family_income", "bank_account_number", "ifsc_code"
 ]);
 
 function belongsInGeneralProfile(key: string): boolean {
-  return !documentSpecificFactKeys.has(key);
+  return generalProfileFactKeys.has(key);
 }
 
 function formatBytes(bytes: number) {
