@@ -71,6 +71,8 @@ function scanPage(): ScanResult {
   const elements = collectOpenShadowElements(document)
     .filter((element) => {
       if (!isVisible(element)) return false;
+      if ("disabled" in element && element.disabled) return false;
+      if ("readOnly" in element && element.readOnly) return false;
       if (element instanceof HTMLInputElement && ["hidden", "password", "checkbox", "radio", "submit", "button", "reset", "image", "file"].includes(element.type)) return false;
       if (element instanceof HTMLTextAreaElement && isFeedbackTextarea(element)) return false;
       if (element.getAttribute("role") === "textbox" && !element.isContentEditable) return false;
@@ -238,13 +240,19 @@ export default defineContentScript({
     chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
       if (message.type === "FS_SCAN") {
         // Let client-rendered forms and delayed portal widgets finish mounting.
-        window.setTimeout(() => {
+        void (async () => {
           try {
-            sendResponse({ ok: true, result: scanPage() });
+            let result = scanPage();
+            // Modern portals often mount their form after hydration or an API call.
+            for (let attempt = 0; attempt < 5 && result.fields.length === 0; attempt += 1) {
+              await new Promise((resolve) => window.setTimeout(resolve, 250));
+              result = scanPage();
+            }
+            sendResponse({ ok: true, result });
           } catch (error) {
             sendResponse({ ok: false, error: error instanceof Error ? error.message : "Could not scan this frame." });
           }
-        }, 700);
+        })();
         return true;
       }
       if (message.type === "FS_HIGHLIGHT") {
