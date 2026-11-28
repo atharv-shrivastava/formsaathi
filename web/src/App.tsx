@@ -50,7 +50,7 @@ const generalProfileFactKeys = new Set([
   "email", "email_address", "phone", "phone_number", "mobile_number",
   "address", "permanent_address", "correspondence_address", "city", "state",
   "pincode", "postal_code", "nationality", "religion", "caste",
-  "annual_income", "family_income", "bank_account_number", "ifsc_code"
+  "annual_income", "family_income", "bank_account_number", "ifsc_code", "gender", "district"
 ]);
 
 function belongsInGeneralProfile(key: string): boolean {
@@ -1017,7 +1017,6 @@ function ProfilePage({ verifiedFacts, pendingFacts, documents, onApprove, onAppr
     { key: "state", label: "State", type: "text" },
     { key: "gender", label: "Gender", type: "text" },
     { key: "annual_income", label: "Annual family income", type: "text" },
-    { key: "percentage", label: "Marks percentage", type: "text" },
     { key: "caste_category", label: "Category", type: "text" },
     { key: "bank_account_number", label: "Bank account number", type: "text" },
     { key: "ifsc_code", label: "IFSC code", type: "text" }
