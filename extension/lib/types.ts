@@ -40,6 +40,7 @@ export interface PortalField {
   autoComplete?: string;
   options?: string[];
   isFile: boolean;
+  isContentEditable?: boolean;
   frameId?: number;
 }
 
