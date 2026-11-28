@@ -334,6 +334,80 @@ code { color: var(--action); background: #eef2ec; }
   .welcome-banner { padding: 17px; }
   .welcome-banner h2 { font-size: 32px; }
 }
+
+/* Spline 3D layer. The React application remains the source of truth for every workflow. */
+.spline-scene-frame {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 12px;
+  background: #17271f;
+}
+.spline-scene-frame iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+}
+.spline-scene-dashboard {
+  min-height: 220px;
+  align-self: stretch;
+  border-color: #dbe5d9;
+}
+.welcome-banner:has(.spline-scene-dashboard) {
+  grid-template-columns: minmax(0,1.08fr) minmax(220px,.78fr) minmax(265px,.9fr);
+}
+.spline-scene-auth {
+  position: absolute;
+  z-index: 0;
+  right: -18px;
+  bottom: 17px;
+  width: min(36%, 380px);
+  height: 240px;
+  border-color: rgba(255,255,255,.14);
+  opacity: .88;
+}
+.auth-story .brand-lockup,
+.auth-story .story-copy,
+.auth-story .story-footer {
+  position: relative;
+  z-index: 1;
+}
+@media (max-width: 1120px) {
+  .welcome-banner:has(.spline-scene-dashboard) {
+    grid-template-columns: minmax(0,1fr) minmax(235px,.82fr);
+  }
+  .spline-scene-dashboard {
+    min-height: 200px;
+  }
+}
+@media (max-width: 860px) {
+  .spline-scene-auth {
+    right: 12px;
+    bottom: 10px;
+    width: 220px;
+    height: 150px;
+    opacity: .5;
+  }
+}
+@media (max-width: 680px) {
+  .welcome-banner:has(.spline-scene-dashboard) {
+    grid-template-columns: 1fr;
+  }
+  .spline-scene-dashboard {
+    min-height: 190px;
+    max-height: 230px;
+  }
+  .spline-scene-auth {
+    width: 160px;
+    height: 120px;
+    opacity: .28;
+  }
+}
+
 @media (prefers-reduced-motion:reduce) {
   *,*::before,*::after { transition-duration:.01ms !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; scroll-behavior:auto !important; }
 }

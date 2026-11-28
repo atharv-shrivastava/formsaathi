@@ -9,6 +9,7 @@ import type {
   TrackedApplication,
   UserDocument
 } from "./lib/types";
+import { SplineScene } from "./components/SplineScene";
 
 type Page = "overview" | "documents" | "profile" | "applications" | "paper-scan" | "extension" | "privacy";
 type AuthMode = "signin" | "signup";
@@ -201,6 +202,7 @@ function AuthScreen() {
             <div><span className="point-check">✓</span><span>You decide what gets autofilled.</span></div>
           </div>
         </div>
+        <SplineScene className="spline-scene-auth" title="FormSaathi interactive document experience" />
         <div className="story-footer">A clearer way to complete applications.</div>
       </section>
       <section className="auth-panel">
@@ -883,6 +885,7 @@ function OverviewPage({ name, documents, verifiedFacts, pendingFacts, applicatio
           <h2>Good to see you, {name}.</h2>
           <p>Keep the documents and approved details you need for applications in one place.</p>
         </div>
+        <SplineScene className="spline-scene-dashboard" title="Interactive FormSaathi document and profile scene" />
         <aside className="next-step-card" aria-label="Suggested next step">
           <div>
             <p className="eyebrow">Suggested next step</p>
