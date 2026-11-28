@@ -9,6 +9,7 @@ import { buildDocumentExtractionPrompt, mergeDocumentFacts, splitDocumentTextInt
 import { prepareImage } from "./prepare.js";
 import { filterRelevantProfileFacts, retrieveApprovedFactsForFields, sanitizeDetectedFields, validateAiMappings } from "./form-analysis.js";
 import { buildPaperFormFields, validatePaperPlacements } from "./paper-form.js";
+import { isAllowedOrigin } from "./origin-policy.js";
 
 const app = express();
 const port = Number(process.env.PORT || 8787);
@@ -25,12 +26,6 @@ const allowedOrigins = new Set(
     .map((origin) => origin.trim())
     .filter(Boolean)
 );
-
-function isAllowedOrigin(origin) {
-  if (typeof origin !== "string" || !origin.trim()) return false;
-  if (allowedOrigins.has(origin)) return true;
-  return /^chrome-extension:\/\/[a-p]{32}$/.test(origin);
-}
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabasePublishableKey = process.env.SUPABASE_PUBLISHABLE_KEY;
