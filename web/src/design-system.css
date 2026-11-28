@@ -553,8 +553,6 @@ code { color: var(--action); background: #eef2ec; }
   transform-style: preserve-3d;
 }
 .nav-card {
-  --nav-rx: 0deg;
-  --nav-ry: 0deg;
   position: relative;
   isolation: isolate;
   display: grid;
@@ -572,7 +570,7 @@ code { color: var(--action); background: #eef2ec; }
   text-align: left;
   font-size: 12px;
   font-weight: 600;
-  transform: perspective(900px) rotateX(var(--nav-rx)) rotateY(var(--nav-ry)) translateZ(0);
+  transform: translateZ(0);
   transform-style: preserve-3d;
   transform-origin: center center;
   transition: transform 260ms cubic-bezier(.2,.8,.2,1), box-shadow 260ms ease,
@@ -585,7 +583,7 @@ code { color: var(--action); background: #eef2ec; }
   color: #294b38;
   border-color: #d3dfd2;
   box-shadow: 4px 5px 0 #e3eae1, 8px 11px 18px rgba(34, 56, 40, .075);
-  transform: perspective(900px) rotateX(var(--nav-rx)) rotateY(var(--nav-ry)) translateY(-2px) translateZ(8px);
+  transform: translateY(-2px);
 }
 .nav-card.active {
   z-index: 1;
@@ -593,11 +591,11 @@ code { color: var(--action); background: #eef2ec; }
   border-color: #315b46;
   background: linear-gradient(145deg, #3c6b50 0%, #315b46 72%, #294f3c 100%);
   box-shadow: 3px 3px 0 #244b37, 7px 9px 17px rgba(36, 75, 55, .16);
-  transform: perspective(900px) rotateX(var(--nav-rx)) rotateY(var(--nav-ry)) translateX(3px) translateZ(12px);
+  transform: translateX(3px);
 }
 .nav-card.active:hover {
   box-shadow: 4px 5px 0 #244b37, 9px 12px 20px rgba(36, 75, 55, .19);
-  transform: perspective(900px) rotateX(var(--nav-rx)) rotateY(var(--nav-ry)) translateX(4px) translateY(-2px) translateZ(14px);
+  transform: translateX(4px) translateY(-2px);
 }
 .nav-card-icon {
   display: grid;
@@ -676,8 +674,8 @@ code { color: var(--action); background: #eef2ec; }
 .workspace-sidebar .signout:hover { color: #315b46; background: #edf3ed; }
 
 @keyframes nav-card-arrive {
-  from { opacity: 0; transform: perspective(900px) translateY(9px) rotateX(-2deg); }
-  to { opacity: 1; transform: perspective(900px) translateY(0) rotateX(0); }
+  from { opacity: 0; transform: translateY(9px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @media (max-width: 1120px) and (min-width: 861px) {
@@ -1069,28 +1067,14 @@ body {
 }
 
 /* Interactive workspace depth: pointer tilt, layered controls and section transitions. */
-.workspace {
-  perspective: 1500px;
-  perspective-origin: 50% 0%;
-}
-.main-panel {
-  transform-style: preserve-3d;
-}
-.page-wrap {
-  transform-style: preserve-3d;
-}
 .page-content {
-  transform-style: preserve-3d;
-  perspective: 1200px;
-  animation: workspace-page-enter 520ms cubic-bezier(.2,.78,.2,1) both;
-  transform-origin: 50% 0;
+  animation: workspace-page-enter 420ms ease both;
 }
 .page-heading {
-  transform: translateZ(10px);
-  animation: workspace-heading-enter 460ms cubic-bezier(.2,.78,.2,1) both;
+  animation: workspace-heading-enter 380ms ease both;
 }
 
-/* Real working cards respond to pointer position, not random perpetual motion. */
+/* Cards keep a simple hover lift without pointer-driven rotation. */
 .workspace .stat-card,
 .workspace .surface-card,
 .workspace .next-step-card,
@@ -1098,19 +1082,10 @@ body {
 .workspace .application-row,
 .workspace .candidate-document-group,
 .workspace .paper-placement-row {
-  --depth-rotate-x: 0deg;
-  --depth-rotate-y: 0deg;
-  transform: perspective(1100px)
-    rotateX(var(--depth-rotate-x))
-    rotateY(var(--depth-rotate-y))
-    translateZ(0);
-  transform-style: preserve-3d;
-  backface-visibility: hidden;
   transition:
-    transform 190ms cubic-bezier(.2,.8,.2,1),
+    transform 180ms ease,
     box-shadow 220ms ease,
     border-color 220ms ease;
-  will-change: transform;
 }
 .workspace .stat-card:hover,
 .workspace .surface-card:hover,
@@ -1119,27 +1094,14 @@ body {
 .workspace .application-row:hover,
 .workspace .candidate-document-group:hover,
 .workspace .paper-placement-row:hover {
-  transform: perspective(1100px)
-    rotateX(var(--depth-rotate-x))
-    rotateY(var(--depth-rotate-y))
-    translateY(-3px)
-    translateZ(7px);
+  transform: translateY(-2px);
   box-shadow:
-    0 21px 44px rgba(37,61,43,.105),
-    0 4px 10px rgba(37,61,43,.035),
+    0 18px 38px rgba(37,61,43,.09),
     inset 0 1px rgba(255,255,255,.94);
   border-color: rgba(255,255,255,.98);
 }
 .workspace .document-table:hover {
-  transform: perspective(1400px) rotateX(.35deg) translateZ(2px);
-}
-.workspace .stat-card,
-.workspace .fact-card,
-.workspace .next-step-card,
-.workspace .application-row,
-.workspace .candidate-document-group,
-.workspace .paper-placement-row {
-  transform-origin: center center;
+  transform: none;
 }
 
 /* Small elements lift from their surfaces, giving each panel actual depth. */
@@ -1167,7 +1129,7 @@ body {
 .surface-card:hover .extension-icon,
 .surface-card:hover .extension-mark,
 .surface-card:hover .empty-illustration {
-  transform: translateZ(18px) rotateY(-9deg) rotateX(5deg);
+  transform: translateY(-2px);
   box-shadow: 0 9px 18px rgba(40,64,45,.12), inset 0 1px rgba(255,255,255,.9);
 }
 
@@ -1192,23 +1154,23 @@ body {
 @keyframes workspace-page-enter {
   0% {
     opacity: 0;
-    transform: perspective(1200px) translateY(13px) rotateX(-1.2deg) scale(.992);
-    filter: blur(2px);
+    transform: translateY(10px) scale(.995);
+    filter: blur(1px);
   }
   65% {
     opacity: 1;
-    transform: perspective(1200px) translateY(-1px) rotateX(.12deg) scale(1.001);
+    transform: translateY(-1px) scale(1);
     filter: blur(0);
   }
   100% {
     opacity: 1;
-    transform: perspective(1200px) translateY(0) rotateX(0) scale(1);
+    transform: translateY(0) scale(1);
     filter: blur(0);
   }
 }
 @keyframes workspace-heading-enter {
-  from { opacity: .4; transform: translateY(7px) translateZ(0); }
-  to { opacity: 1; transform: translateY(0) translateZ(10px); }
+  from { opacity: .4; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @media (hover: none), (pointer: coarse) {
@@ -1553,13 +1515,13 @@ body {
     border-radius: 11px;
     background: linear-gradient(145deg, rgba(255,255,255,.82), rgba(232,241,231,.62));
     box-shadow: 0 4px 0 rgba(198,215,198,.65), 0 8px 14px rgba(41,67,46,.055), inset 0 1px rgba(255,255,255,.95);
-    transform: perspective(500px) rotateX(3deg);
+    transform: none;
   }
   .workspace-3d-sidebar .nav-object-button.active {
     border-color: rgba(255,255,255,.7);
     background: linear-gradient(145deg, #416d50, #315b46);
     box-shadow: 0 4px 0 #244b37, 0 8px 16px rgba(36,75,55,.16), inset 0 1px rgba(255,255,255,.22);
-    transform: perspective(500px) rotateX(0deg) translateY(-2px);
+    transform: translateY(-2px);
   }
   .workspace-3d-sidebar .nav-object-icon {
     width: 24px;
