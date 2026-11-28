@@ -14,13 +14,18 @@ const aliases: Record<string, string[]> = {
   mother_name: ["mother name", "mothers name", "name of mother", "mother full name", "mother fullname", "mother"],
   guardian_name: ["guardian name", "name of guardian", "parent name", "parents name", "legal guardian"],
   date_of_birth: ["date of birth", "dob", "birth date", "birthdate", " जन्म तिथि", " जन्मतिथि", "date birth"],
-  annual_income: ["annual family income", "family annual income", "family income", "annual income", "yearly income", "income per annum", "annual earnings", "total family income", "gross annual income", "income"],
-  percentage: ["class 12 percentage", "12th percentage", "aggregate percentage", "marks percentage", "percentage", "class xii percentage", "overall percentage"],
+  annual_income: ["annual family income", "family annual income", "family income", "annual income", "yearly income", "income per annum", "annual earnings", "total family income", "gross annual income"],
+  percentage: ["class 12 percentage", "12th percentage", "aggregate percentage", "marks percentage", "class xii percentage", "overall percentage"],
   bank_account_number: ["bank account number", "account number", "account no", "a c number", "ac number", "bank a c no", "savings account number", "bank a c number"],
-  ifsc_code: ["ifsc code", "ifsc"],
+  ifsc_code: ["ifsc code"],
   email: ["email address", "e mail", "email id", "mail id", "email"],
   phone: ["mobile number", "mobile no", "contact number", "phone number", "telephone", "phone", "mobile", "cell number", "primary mobile", "registered mobile number"],
-  address: ["permanent address", "residential address", "correspondence address", "postal address", "address"],
+  address: [
+    "permanent address", "present address", "current address", "residential address",
+    "correspondence address", "communication address", "mailing address", "postal address",
+    "street address", "street name", "address line 1", "address line 2",
+    "house number", "house no", "door number", "door no", "locality", "address"
+  ],
   city: ["city", "town"],
   state: ["state", "province"],
   pincode: ["pin code", "pincode", "postal code", "zip code", "zip", "area pin", "postal pin code"],
@@ -65,12 +70,34 @@ export function canonicalFactKey(value: string): string | null {
   const normalized = normalize(value);
   if (!normalized) return null;
   const exact = aliasLookup.get(normalized);
+  // A bare "Percentage" label does not say whether this is attendance,
+  // academic marks or another ratio. Require a contextual education label.
+  if (exact === "percentage" && normalized === "percentage") return null;
   if (exact) return exact;
 
   // Prefer the longest complete alias phrase, not arbitrary substring matches.
   const padded = " " + normalized + " ";
   const matches = Array.from(aliasLookup.entries())
-    .filter(([alias]) => alias && padded.includes(" " + alias + " "))
+    .filter(([alias, key]) => {
+      if (!alias || !padded.includes(" " + alias + " ")) return false;
+
+      // A generic percentage label inside a longer phrase is not enough to
+      // infer academic marks (for example, "Attendance Percentage").
+      if (key === "percentage" && alias === "percentage" && normalized !== "percentage") {
+        return false;
+      }
+
+      // IFSC/MICR is a combined identifier field, not a safe IFSC-only target.
+      if (key === "ifsc_code" && /\bmicr\b/.test(normalized)) return false;
+
+      // Avoid mapping other/additional income-source fields to family annual income.
+      if (key === "annual_income" &&
+          /\b(other|additional|alternate|secondary|source)\b/.test(normalized)) {
+        return false;
+      }
+
+      return true;
+    })
     .sort((a, b) => b[0].length - a[0].length);
   return matches[0]?.[1] || null;
 }
@@ -148,10 +175,12 @@ export function createReviewRows(
 
     let candidates = facts.filter((fact) => normalizedFactKey(fact.key) === key);
     const documentSpecific = !generalProfileKeys.has(key);
-    const preferredScope = documentSpecific ? "document" : "general";
-    const scoped = candidates.filter((fact) => fact.sourceType === preferredScope);
-    if (scoped.length) candidates = scoped;
-    else if (documentSpecific) candidates = candidates.filter((fact) => fact.sourceType !== "general");
+    // General fields must consider both user-entered profile values and
+    // approved OCR values. If they disagree, createReviewRows marks a conflict
+    // instead of silently preferring the manually entered value.
+    if (documentSpecific) {
+      candidates = candidates.filter((fact) => fact.sourceType !== "general");
+    }
     if (!candidates.length && ["first_name", "middle_name", "last_name"].includes(key)) {
       candidates = facts.filter(isApplicantFullNameFact).map((fact) => ({
         ...fact,

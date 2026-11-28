@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { disconnectExtensionAccount, getApprovedDocumentFacts, getExtensionAccount, getExtensionSession, getVerifiedProfileFacts, signInExtensionAccount, type ExtensionAccount } from "../../lib/account";
-import { checkApi, extractDocument, prepareImage as requestImagePreparation, requestFormAnalysis } from "../../lib/api";
+import { disconnectExtensionAccount, getExtensionAccount, getExtensionSession, signInExtensionAccount, type ExtensionAccount } from "../../lib/account";
+import { checkApi, extractDocument, fetchAutofillFacts, prepareImage as requestImagePreparation, requestFormAnalysis } from "../../lib/api";
 import { deleteDocument, listDocuments, saveDocument } from "../../lib/db";
 import { canonicalFieldKey, categoryForKey, createReviewRows, inferDocumentCategory, retrieveRelevantDocuments } from "../../lib/mapping";
 import type { CandidateFact, DocumentCategory, ReviewRow, ScanResult, StoredDocument } from "../../lib/types";
@@ -22,7 +22,7 @@ const emptyScan: ScanResult = { title: "", url: "", fields: [] };
 
 function mergeAiMappings(
   rows: ReviewRow[],
-  mappings: Array<{ fieldId: string; factId: string; factKey: string; value: string; confidence: number; sourceType?: "general" | "document" }>
+  mappings: Array<{ fieldId: string; factId: string; factKey: string; value: string; confidence: number; sourceType?: "general" | "document"; sourceName?: string | null }>
 ): ReviewRow[] {
   const byField = new Map(mappings.map((mapping) => [mapping.fieldId, mapping]));
   return rows.map((row) => {
@@ -32,11 +32,13 @@ function mergeAiMappings(
       ...row,
       canonicalKey: suggestion.factKey,
       value: suggestion.value,
-      sourceName: suggestion.sourceType === "document" ? "Document-specific information" : "General information",
+      sourceName: suggestion.sourceName || (suggestion.sourceType === "document" ? "Document-specific information" : "General information"),
       sourceType: suggestion.sourceType || "general",
       sourceId: suggestion.factId,
       confidence: suggestion.confidence,
-      evidence: "AI matched this field to the approved profile fact '" + suggestion.factKey + "'. The original stored value is shown; verify it before filling.",
+      evidence: suggestion.sourceName
+        ? "AI matched this field to an approved value stored from " + suggestion.sourceName + ". Verify it before filling."
+        : "AI matched this field to the approved Saral Form fact '" + suggestion.factKey + "'. Verify it before filling.",
       status: "needs-review"
     };
   });
@@ -62,6 +64,7 @@ export default function App() {
   const [maxWidth, setMaxWidth] = useState(300);
   const [maxHeight, setMaxHeight] = useState(300);
   const [preparingId, setPreparingId] = useState<string | null>(null);
+  const [reprocessingId, setReprocessingId] = useState<string | null>(null);
 
   const reloadDocuments = async () => setDocuments(await listDocuments());
 
@@ -84,9 +87,9 @@ export default function App() {
       const connected = await signInExtensionAccount(authEmail, authPassword);
       setAccount(connected);
       setAuthPassword("");
-      setStatus("Connected to your FormSaathi account. Reviewed profile facts are ready for matching.");
+      setStatus("Connected to your Saral Form account. Approved profile and scanned-document facts are ready for matching.");
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : "Could not connect your FormSaathi account.");
+      setAuthError(error instanceof Error ? error.message : "Could not connect your Saral Form account.");
     } finally {
       setAuthBusy(false);
     }
@@ -99,7 +102,7 @@ export default function App() {
       await disconnectExtensionAccount();
       setAccount(null);
       setRows([]);
-      setStatus("FormSaathi account disconnected from this extension.");
+      setStatus("Saral Form account disconnected from this extension.");
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Could not disconnect the account.");
     } finally {
@@ -157,14 +160,14 @@ export default function App() {
       return;
     }
     if (!apiReady) {
-      setStatus("The hosted FormSaathi service is unavailable. Check your connection and retry.");
+      setStatus("The hosted Saral Form service is unavailable. Check your connection and retry.");
       return;
     }
     setPreparingId(document.id);
     setStatus("Preparing a JPEG copy. Your original vault document will remain unchanged.");
     try {
       const session = await getExtensionSession();
-      if (!session) throw new Error("Connect your FormSaathi account before preparing an image.");
+      if (!session) throw new Error("Connect your Saral Form account before preparing an image.");
       const result = await requestImagePreparation(document, maxKb, maxWidth, maxHeight, session.access_token);
       const url = URL.createObjectURL(result.blob);
       const anchor = window.document.createElement("a");
@@ -177,6 +180,52 @@ export default function App() {
       setStatus(error instanceof Error ? error.message : "Could not prepare this image.");
     } finally {
       setPreparingId(null);
+    }
+  }
+
+
+  async function rerunDocumentOcr(document: StoredDocument) {
+    if (!account) {
+      setStatus("Connect your Saral Form account before running document OCR.");
+      return;
+    }
+    if (!apiReady) {
+      setStatus("The hosted Saral Form OCR service is unavailable. Check your connection and retry.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Saral Form will send " + document.name +
+      " from this browser's local vault to the hosted OCR processor again. The previous local OCR cache will be replaced only after the new request succeeds. Continue?"
+    );
+    if (!confirmed) return;
+
+    setReprocessingId(document.id);
+    setStatus("Re-running OCR for " + document.name + "…");
+    try {
+      const session = await getExtensionSession();
+      if (!session) throw new Error("Your Saral Form session expired. Connect your account again.");
+      const extracted = await extractDocument(document, session.access_token);
+      await saveDocument({
+        ...document,
+        cachedText: extracted.text,
+        cachedFacts: extracted.facts,
+        cachedAt: Date.now()
+      });
+      await reloadDocuments();
+      setStatus(
+        "OCR re-run completed for " + document.name + ". " +
+        extracted.facts.length + " candidate value(s) were detected. " +
+        "The refreshed values will be available during the next relevant form scan."
+      );
+    } catch (error) {
+      setStatus(
+        "Could not re-run OCR for " + document.name + ": " +
+        (error instanceof Error ? error.message : "Please retry.") +
+        " The previous OCR cache was kept."
+      );
+    } finally {
+      setReprocessingId(null);
     }
   }
 
@@ -209,7 +258,7 @@ export default function App() {
       }));
       const successfulFrames = frameResults.filter((item): item is NonNullable<typeof item> => Boolean(item));
       if (!successfulFrames.length) {
-        throw new Error("FormSaathi could not reach this page. Reload the tab after installing the extension, then scan again. Browser-internal pages and some protected portals block extensions.");
+        throw new Error("Saral Form could not reach this page. Reload the tab after installing the extension, then scan again. Browser-internal pages and some protected portals block extensions.");
       }
       const nextScan: ScanResult = {
         title: successfulFrames[0]?.result.title || "Web form",
@@ -231,30 +280,38 @@ export default function App() {
       ));
 
       const facts: Array<CandidateFact & { sourceId: string; sourceName: string }> = [];
-      let cloudFactCount = 0;
+      let generalFactCount = 0;
+      let approvedOcrFactCount = 0;
+      let pendingOcrFactCount = 0;
       if (account) {
-        const cloudFacts = await getVerifiedProfileFacts();
-        cloudFactCount = cloudFacts.length;
-        for (const fact of cloudFacts) {
+        const session = await getExtensionSession();
+        if (!session) throw new Error("Your Saral Form session expired. Connect your account again.");
+        const autofillData = await fetchAutofillFacts(session.access_token);
+        generalFactCount = autofillData.generalFacts.length;
+        approvedOcrFactCount = autofillData.documentFacts.length;
+        pendingOcrFactCount = autofillData.pendingDocumentFactCount;
+
+        for (const fact of autofillData.generalFacts) {
           facts.push({
             key: fact.fact_key,
             value: fact.fact_value,
             confidence: fact.confidence ?? 0.92,
-            evidence: "Reviewed and approved in your FormSaathi information profile.",
+            evidence: fact.source_document_id
+              ? "Approved profile value extracted from " + (fact.sourceName || "an uploaded document") + "."
+              : "Reviewed and approved in your Saral Form information profile.",
             sourceId: fact.id,
-            sourceName: "General information",
+            sourceName: fact.sourceName || "General information",
             sourceType: "general"
           });
         }
-        const documentFacts = await getApprovedDocumentFacts();
-        for (const fact of documentFacts) {
+        for (const fact of autofillData.documentFacts) {
           facts.push({
             key: fact.fact_key,
             value: fact.fact_value,
             confidence: fact.confidence ?? 0.9,
-            evidence: fact.evidence || "Approved value extracted from a specific uploaded document.",
+            evidence: fact.evidence || "Approved OCR-extracted value from an uploaded document.",
             sourceId: fact.id,
-            sourceName: "Document-specific information",
+            sourceName: fact.sourceName || "Document-specific information",
             sourceType: "document"
           });
         }
@@ -266,20 +323,20 @@ export default function App() {
         if (!apiReady) {
           documentOcrMessage = " Hosted document OCR is unavailable; no document was uploaded.";
         } else if (!account) {
-          documentOcrMessage = " Connect your FormSaathi account to process selected browser-local documents.";
+          documentOcrMessage = " Connect your Saral Form account to process selected browser-local documents.";
         } else {
           const cachedCount = relevantDocuments.filter((document) => Boolean(document.cachedAt)).length;
           const uploadCount = relevantDocuments.length - cachedCount;
           const approvedUpload = uploadCount === 0 || window.confirm(
-            "FormSaathi will send " + uploadCount + " relevant document(s) from this browser's local vault to its hosted OCR processor on Render. Files are processed in memory and are not saved to the server's disk. Extracted values remain unverified until you review them. Continue?"
+            "Saral Form will send " + uploadCount + " relevant document(s) from this browser's local vault to its hosted OCR processor on Render. Files are processed in memory and are not saved to the server's disk. Extracted values remain unverified until you review them. Continue?"
           );
 
           if (!approvedUpload) {
             documentOcrMessage = " Document OCR was skipped because you declined this upload.";
           } else {
             const session = await getExtensionSession();
-            if (!session) throw new Error("Your FormSaathi session expired. Connect your account again.");
-            setStatus("Processing " + relevantDocuments.length + " relevant document(s) through hosted FormSaathi OCR: " + relevantCategories.join(", ") + ".");
+            if (!session) throw new Error("Your Saral Form session expired. Connect your account again.");
+            setStatus("Processing " + relevantDocuments.length + " relevant document(s) through hosted Saral Form OCR: " + relevantCategories.join(", ") + ".");
             for (const document of relevantDocuments) {
               let documentFacts = document.cachedFacts || [];
               if (!document.cachedAt) {
@@ -301,14 +358,14 @@ export default function App() {
 
       if (account) {
         const consent = window.confirm(
-          "For AI form analysis, FormSaathi sends every detected visible field descriptor from this scan (labels, names, placeholders, types and dropdown choices, up to 120 fields) to its backend. The backend retrieves a few likely approved profile facts per field using regex hints and text similarity, then sends the complete field list and those candidates to Google Gemini to choose matches. Values already typed into the form, cookies and original document files are not sent. Continue with this one-time AI analysis?"
+          "For AI form analysis, Saral Form sends every detected visible field descriptor from this scan (labels, names, placeholders, types and dropdown choices, up to 120 fields) to its backend. The backend retrieves a few likely approved profile facts per field using regex hints and text similarity, then sends the complete field list and those candidates to Google Gemini to choose matches. Values already typed into the form, cookies and original document files are not sent. Continue with this one-time AI analysis?"
         );
 
         if (consent) {
           try {
-            setStatus("Sending field descriptions to the FormSaathi backend for AI matching…");
+            setStatus("Sending field descriptions to the Saral Form backend for AI matching…");
             const session = await getExtensionSession();
-            if (!session) throw new Error("Your FormSaathi session expired. Connect your account again.");
+            if (!session) throw new Error("Your Saral Form session expired. Connect your account again.");
             const analysis = await requestFormAnalysis(nextScan, session.access_token);
             finalRows = mergeAiMappings(baseRows, analysis.mappings);
             aiMessage = analysis.note || (analysis.aiUsed ? "AI matching completed." : "No AI matches were found.");
@@ -322,17 +379,20 @@ export default function App() {
           aiMessage = "AI analysis was skipped. Deterministic matches are still available for review.";
         }
       } else {
-        aiMessage = "Connect your FormSaathi account to send this scan to the hosted backend and use AI matching.";
+        aiMessage = "Connect your Saral Form account to send this scan to the hosted backend and use AI matching.";
       }
 
       setRows(finalRows);
       const aiMatchedCount = finalRows.filter((row) => row.evidence?.startsWith("AI matched")).length;
       const localOffline = documentOcrMessage;
       setStatus(
-        "Detected " + nextScan.fields.length + " fields; " +
-        cloudFactCount + " direct verified-profile match(es), " +
+        "Detected " + nextScan.fields.length + " fields; loaded " +
+        generalFactCount + " approved general value(s) and " +
+        approvedOcrFactCount + " approved OCR-extracted document value(s); " +
+        pendingOcrFactCount + " OCR value(s) still awaiting review. " +
         localDocumentCount + " browser-local document(s) processed by hosted OCR, and " +
-        aiMatchedCount + " AI match(es). " + aiMessage + localOffline
+        aiMatchedCount + " AI match(es). " + aiMessage + localOffline +
+        (pendingOcrFactCount > 0 ? " Approve pending OCR values on the Saral Form website before autofilling them." : "")
       );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not scan this page.");
@@ -397,9 +457,9 @@ export default function App() {
     }
 
     const confirmed = window.confirm(
-      "FormSaathi is ready to fill " + pendingRows.length +
+      "Saral Form is ready to fill " + pendingRows.length +
       " field(s) using the values shown in this panel. Check the suggestions first. " +
-      "This may replace values already entered in those fields. FormSaathi will not submit the form. Continue?"
+      "This may replace values already entered in those fields. Saral Form will not submit the form. Continue?"
     );
     if (!confirmed) return;
 
@@ -437,7 +497,7 @@ export default function App() {
       setStatus(
         "Filled " + successCount + " of " + pendingRows.length + " available field(s)." +
         (failureCount ? " " + failureCount + " field(s) could not be filled; review them individually." : " Review the completed fields before submitting the portal form.") +
-        " FormSaathi did not submit the application."
+        " Saral Form did not submit the application."
       );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not fill the fields on this page.");
@@ -458,18 +518,18 @@ export default function App() {
       return;
     }
     if (!account) {
-      setStatus("Connect your FormSaathi account before using backend AI mapping.");
+      setStatus("Connect your Saral Form account before using backend AI mapping.");
       return;
     }
     if (!window.confirm(
-      "This sends every detected visible field descriptor in the current scan (up to 120 fields), plus a small set of retrieved approved profile facts per field, to the FormSaathi backend and Google Gemini. Values already typed into the form, cookies and original document files are not sent. Continue?"
+      "This sends every detected visible field descriptor in the current scan (up to 120 fields), plus a small set of retrieved approved profile facts per field, to the Saral Form backend and Google Gemini. Values already typed into the form, cookies and original document files are not sent. Continue?"
     )) return;
 
     setBusy(true);
-    setStatus("Requesting AI mapping from the hosted FormSaathi backend…");
+    setStatus("Requesting AI mapping from the hosted Saral Form backend…");
     try {
       const session = await getExtensionSession();
-      if (!session) throw new Error("Your FormSaathi session expired. Connect your account again.");
+      if (!session) throw new Error("Your Saral Form session expired. Connect your account again.");
       const analysis = await requestFormAnalysis(scan, session.access_token);
       setRows((current) => mergeAiMappings(current, analysis.mappings));
       setStatus(
@@ -496,36 +556,36 @@ export default function App() {
     <main className="app-shell">
       <header className="brand-row">
         <div className="brand-block">
-          <div className="brand-mark">FS</div>
-          <div className="brand-name">FormSaathi</div>
+          <div className="brand-mark"><img src="/icons/saral-form-icon.png" alt="" /></div>
+          <div className="brand-name">Saral Form</div>
           <div className="brand-caption">Your form companion</div>
         </div>
         <div className={apiReady ? "service-pill online" : "service-pill offline"}>
-          <span /> FormSaathi API {apiReady ? "online" : "offline"}
+          <span /> Saral Form API {apiReady ? "online" : "offline"}
         </div>
       </header>
 
-      <section className="account-card" aria-label="FormSaathi account connection">
-        {accountLoading ? <p className="account-muted">Checking your FormSaathi account…</p> : account ? (
+      <section className="account-card" aria-label="Saral Form account connection">
+        {accountLoading ? <p className="account-muted">Checking your Saral Form account…</p> : account ? (
           <div className="account-connected">
-            <div><strong>Account connected</strong><small>{account.email || "Signed in"}</small><small>Approved profile facts are available for form matching.</small></div>
+            <div><strong>Account connected</strong><small>{account.email || "Signed in"}</small><small>Approved profile facts and OCR-extracted document values are available for form matching.</small></div>
             <button type="button" className="account-disconnect" disabled={authBusy} onClick={() => void handleDisconnect()}>{authBusy ? "Please wait…" : "Disconnect"}</button>
           </div>
         ) : (
           <form className="account-form" onSubmit={(event) => void handleConnect(event)}>
-            <div><strong>Connect your FormSaathi account</strong><small>Use the same email and password as the web app.</small></div>
+            <div><strong>Connect your Saral Form account</strong><small>Use the same email and password as the web app.</small></div>
             <input type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="Email address" autoComplete="username" required />
             <input type="password" value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} placeholder="Password" autoComplete="current-password" required />
             {authError && <p className="account-error" role="alert">{authError}</p>}
             <button className="primary-button full" type="submit" disabled={authBusy}>{authBusy ? "Connecting…" : "Connect account"}</button>
-            <a className="account-link" href="https://formsaathi-web.vercel.app" target="_blank" rel="noreferrer">Open FormSaathi website ↗</a>
+            <a className="account-link" href="https://formsaathi-web.vercel.app" target="_blank" rel="noreferrer">Open Saral Form website ↗</a>
           </form>
         )}
         {account && authError && <p className="account-error" role="alert">{authError}</p>}
       </section>
 
       <div className="privacy-note">
-        Your approved profile facts sync from FormSaathi. Selected local documents are sent to hosted OCR only after a separate confirmation. AI analysis sends the complete detected field-descriptor list (up to 120 fields) and only the retrieved approved-fact candidates per field after your confirmation; typed form values, cookies and original files are not sent to Gemini for webpage-form matching.
+        Approved general information and OCR-extracted values from documents scanned in the Saral Form website sync from your account. OCR candidates must be approved on the website before the extension can use them. Selected browser-local documents are a separate optional vault and are sent to hosted OCR only after confirmation. AI analysis sends detected field descriptors and approved fact candidates after your confirmation; typed form values, cookies and original files are not sent for webpage-form matching.
       </div>
 
       <nav className="tabs">
@@ -576,6 +636,16 @@ export default function App() {
                     {categories.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                   </select>
                   <small>{document.cachedAt ? "OCR cached locally" : "Not processed"}</small>
+                  <button
+                    type="button"
+                    className="text-button prepare-button"
+                    disabled={!apiReady || !account || reprocessingId === document.id}
+                    onClick={() => void rerunDocumentOcr(document)}
+                  >
+                    {reprocessingId === document.id
+                      ? "Re-running OCR…"
+                      : document.cachedAt ? "Re-run OCR" : "Run OCR now"}
+                  </button>
                   {document.mimeType.startsWith("image/") && (
                     <button className="text-button prepare-button" disabled={!apiReady || preparingId === document.id} onClick={() => void prepareDocumentImage(document)}>
                       {preparingId === document.id ? "Preparing…" : "Prepare JPEG copy"}
@@ -612,7 +682,7 @@ export default function App() {
               </button>
               <p className="muted small">Fills only fields with a value. File uploads, conflicts and already-filled fields are skipped. The application is never submitted.</p>
               <button className="secondary-button full" disabled={busy} onClick={() => void tryAiMapping()}>Re-run AI form analysis</button>
-              <p className="muted small">Uses the hosted FormSaathi backend and Gemini. Each AI request requires your confirmation.</p>
+              <p className="muted small">Uses the hosted Saral Form backend and Gemini. Each AI request requires your confirmation.</p>
               <div className="mapping-list">
                 {rows.map((row, index) => (
                   <article className="mapping-card" key={row.field.id}>
@@ -645,7 +715,7 @@ export default function App() {
       )}
 
       <footer className="status-bar"><span className="status-dot" />{status}</footer>
-      <div className="footer-note">FormSaathi never submits an application for you.</div>
+      <div className="footer-note">Saral Form never submits an application for you.</div>
     </main>
   );
 }

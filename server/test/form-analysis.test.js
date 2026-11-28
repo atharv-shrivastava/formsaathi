@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   filterRelevantProfileFacts,
+  retrieveApprovedFactsForFields,
   retrieveProfileFactsForFields,
   sanitizeDetectedFields,
   validateAiMappings
@@ -202,4 +203,142 @@ test("retrieves document identifiers from their document-specific labels", () =>
   ];
   const retrieved = retrieveProfileFactsForFields(idFields, idFacts);
   assert.deepEqual(retrieved.map((item) => item.candidates[0]?.factId), ["a", "p", "r"]);
+});
+
+
+test("retrieves approved OCR document facts for a document-specific form field", () => {
+  const passportField = {
+    id: "passport-field",
+    label: "Passport number",
+    name: "passport_number",
+    placeholder: "Enter passport number",
+    tagName: "input",
+    inputType: "text",
+    options: [],
+    isFile: false
+  };
+  const ocrFact = {
+    id: "ocr-passport-1",
+    fact_key: "passport_number",
+    fact_label: "Passport Number",
+    fact_value: "N1234567",
+    source_document_id: "passport-document",
+    sourceName: "Passport Scan.pdf",
+    sourceType: "document",
+    updated_at: "2026-11-28T10:00:00Z"
+  };
+
+  const retrieved = retrieveApprovedFactsForFields([passportField], [], [ocrFact]);
+
+  assert.equal(retrieved[0].candidates.length, 1);
+  assert.equal(retrieved[0].candidates[0].factValue, "N1234567");
+  assert.equal(retrieved[0].candidates[0].sourceType, "document");
+  assert.equal(retrieved[0].candidates[0].sourceName, "Passport Scan.pdf");
+});
+
+test("uses an approved OCR document value when the general profile has no matching fact", () => {
+  const applicantField = {
+    id: "applicant-name",
+    label: "Applicant full name",
+    name: "applicant_name",
+    tagName: "input",
+    inputType: "text",
+    options: [],
+    isFile: false
+  };
+  const ocrFact = {
+    id: "ocr-name-1",
+    fact_key: "applicant_name",
+    fact_label: "Applicant Name",
+    fact_value: "Aarav Sharma",
+    source_document_id: "identity-document",
+    sourceName: "Identity Certificate.pdf",
+    sourceType: "document"
+  };
+
+  const retrieved = retrieveApprovedFactsForFields([applicantField], [], [ocrFact]);
+
+  assert.equal(retrieved[0].candidates.length, 1);
+  assert.equal(retrieved[0].candidates[0].factValue, "Aarav Sharma");
+  assert.equal(retrieved[0].candidates[0].sourceName, "Identity Certificate.pdf");
+});
+
+test("preserves OCR source filename through AI mapping validation", () => {
+  const passportField = {
+    id: "passport-field",
+    label: "Passport number",
+    name: "passport_number",
+    tagName: "input",
+    inputType: "text",
+    options: [],
+    isFile: false
+  };
+  const ocrFact = {
+    id: "ocr-passport-2",
+    fact_key: "passport_number",
+    fact_label: "Passport Number",
+    fact_value: "N7654321",
+    source_document_id: "passport-document",
+    sourceName: "Passport Scan.pdf",
+    sourceType: "document"
+  };
+  const retrieved = retrieveApprovedFactsForFields([passportField], [], [ocrFact]);
+  const mappings = validateAiMappings(
+    [{ fieldId: "passport-field", factId: "ocr-passport-2", confidence: 0.93 }],
+    [passportField],
+    retrieved
+  );
+
+  assert.equal(mappings.length, 1);
+  assert.equal(mappings[0].value, "N7654321");
+  assert.equal(mappings[0].sourceType, "document");
+  assert.equal(mappings[0].sourceName, "Passport Scan.pdf");
+});
+
+
+test("keeps manual and OCR values together and rejects AI mapping when they conflict", () => {
+  const applicantField = {
+    id: "applicant-name-conflict",
+    label: "Applicant full name",
+    name: "applicant_name",
+    tagName: "input",
+    inputType: "text",
+    options: [],
+    isFile: false
+  };
+  const generalFact = {
+    id: "manual-name",
+    fact_key: "applicant_name",
+    fact_label: "Applicant Name",
+    fact_value: "Aarav Sharma",
+    sourceType: "general"
+  };
+  const ocrFact = {
+    id: "ocr-name",
+    fact_key: "applicant_name",
+    fact_label: "Applicant Name",
+    fact_value: "Aarav Kumar Sharma",
+    source_document_id: "identity-document",
+    sourceName: "Identity Certificate.pdf",
+    sourceType: "document"
+  };
+
+  const retrieved = retrieveApprovedFactsForFields(
+    [applicantField],
+    [generalFact],
+    [ocrFact]
+  );
+
+  assert.equal(retrieved[0].candidates.length, 2);
+  assert.deepEqual(
+    new Set(retrieved[0].candidates.map((candidate) => candidate.factValue)),
+    new Set(["Aarav Sharma", "Aarav Kumar Sharma"])
+  );
+
+  const mappings = validateAiMappings(
+    [{ fieldId: applicantField.id, factId: "manual-name", confidence: 0.99 }],
+    [applicantField],
+    retrieved
+  );
+  assert.deepEqual(mappings, []);
 });

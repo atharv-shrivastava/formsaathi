@@ -1,4 +1,4 @@
-name: FormSaathi Chrome Extension Release
+name: Saral Form Chrome Extension Release
 
 on:
   push:
@@ -44,6 +44,7 @@ jobs:
           mkdir -p release
           archive="$(find extension/.output -type f -name '*.zip' -print -quit)"
           test -n "$archive"
+          cp "$archive" release/Saral-Form-Chrome-Extension.zip
           cp "$archive" release/FormSaathi-Chrome-Extension.zip
 
       - name: Publish development release
@@ -51,16 +52,18 @@ jobs:
         with:
           tag_name: extension-v0.1.0
           target_commitish: ${{ github.sha }}
-          name: FormSaathi Chrome Extension v0.1.0
+          name: Saral Form Chrome Extension v0.1.0
           prerelease: true
           make_latest: false
           overwrite_files: true
-          files: release/FormSaathi-Chrome-Extension.zip
+          files: |
+            release/Saral-Form-Chrome-Extension.zip
+            release/FormSaathi-Chrome-Extension.zip
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: formsaathi-chrome-extension-release
-          path: release/FormSaathi-Chrome-Extension.zip
+          name: saral-form-chrome-extension-release
+          path: release/Saral-Form-Chrome-Extension.zip
           if-no-files-found: error
           retention-days: 30

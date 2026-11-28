@@ -50,8 +50,14 @@ const factAliases = {
   aadhaar_number: ["aadhaar number", "aadhar number", "uid number", "uidai number"],
   pan_number: ["pan number", "pan card number", "permanent account number"],
   passport_number: ["passport number", "passport no"],
-  certificate_number: ["certificate number", "certificate no", "document number"],
-  roll_number: ["roll number", "roll no", "registration number", "enrolment number"],
+  document_number: ["document number", "document no", "serial number", "reference number"],
+  registration_number: ["registration number", "registration no", "enrolment number", "enrollment number"],
+  issue_date: ["issue date", "date of issue", "issued on"],
+  expiry_date: ["expiry date", "expiration date", "valid until"],
+  marks_obtained: ["marks obtained", "marks scored", "marks secured"],
+  total_marks: ["total marks", "maximum marks", "marks out of"],
+  cgpa: ["cgpa", "cumulative grade point average"],
+  sgpa: ["sgpa", "semester grade point average"],
   ifsc_code: ["ifsc", "ifsc code"],
   postal_code: ["postal code", "pin code", "pincode", "zip code"],
   pincode: ["postal code", "pin code", "pincode", "zip code"],
@@ -222,6 +228,7 @@ export function retrieveProfileFactsForFields(fields, facts) {
           retrievalReasons: retrieval.reasons,
           sourceDocumentId: fact.source_document_id || null,
           sourceType: fact.sourceType || "general",
+          sourceName: fact.sourceName || null,
           updatedAt: fact.updated_at || null
         } : null;
       })
@@ -232,6 +239,32 @@ export function retrieveProfileFactsForFields(fields, facts) {
       .slice(0, MAX_CANDIDATES_PER_FIELD);
 
     return { fieldId: field.id, candidates };
+  });
+}
+
+const documentSpecificFieldPattern = /\b(aadhaar|aadhar|pan card|permanent account|passport|certificate|document number|serial number|roll number|registration number|enrolment|enrollment|student id|admission number|issue date|expiry date|percentage|cgpa|sgpa|marks obtained|marks scored|marksheet|mark sheet|board name|school name|grade)\b/;
+
+export function retrieveApprovedFactsForFields(fields, generalFacts, documentFacts) {
+  const generalRetrieved = retrieveProfileFactsForFields(fields, generalFacts);
+  const documentRetrieved = retrieveProfileFactsForFields(fields, documentFacts);
+
+  return fields.map((field, index) => {
+    const generalCandidates = generalRetrieved[index].candidates;
+    const documentCandidates = documentRetrieved[index].candidates;
+    const candidates = [];
+    const seenFactIds = new Set();
+
+    // Interleave both stores so a long list from one source cannot hide the
+    // other source. The validator can then reject conflicting values.
+    for (let rank = 0; rank < MAX_CANDIDATES_PER_FIELD; rank += 1) {
+      for (const candidate of [generalCandidates[rank], documentCandidates[rank]]) {
+        if (!candidate || seenFactIds.has(candidate.factId)) continue;
+        seenFactIds.add(candidate.factId);
+        candidates.push(candidate);
+      }
+    }
+
+    return { fieldId: field.id, candidates: candidates.slice(0, MAX_CANDIDATES_PER_FIELD) };
   });
 }
 
@@ -302,6 +335,11 @@ export function validateAiMappings(rawMappings, fields, retrievedFacts) {
     const candidate = retrievalByField.get(field?.id)?.get(candidateId);
     const confidence = Number(raw.confidence);
     if (!field || !candidate || field.isFile || blockedInputTypes.has(field.inputType)) continue;
+    const fieldCandidates = Array.from(retrievalByField.get(field.id)?.values() || []);
+    const distinctValues = new Set(fieldCandidates
+      .map((item) => normalize(item.factValue))
+      .filter(Boolean));
+    if (distinctValues.size > 1) continue;
     if (!Number.isFinite(confidence) || confidence < 0.72 || confidence > 1) continue;
     if (!String(candidate.factValue || "").trim()) continue;
 
@@ -324,6 +362,7 @@ export function validateAiMappings(rawMappings, fields, retrievedFacts) {
       confidence,
       sourceDocumentId: candidate.sourceDocumentId || null,
       sourceType: candidate.sourceType || "general",
+      sourceName: candidate.sourceName || null,
       updatedAt: candidate.updatedAt || null
     };
     const current = bestByField.get(field.id);
