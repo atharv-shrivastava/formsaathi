@@ -756,7 +756,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
     }
   }
 
-  const nav: Array<{ id: Page; label: string; icon: string }> = [
+  const nav = useMemo<Array<{ id: Page; label: string; icon: string }>>(() => [
     { id: "overview", label: "Overview", icon: "⌂" },
     { id: "documents", label: "My documents", icon: "▤" },
     { id: "profile", label: "Information profile", icon: "◈" },
@@ -764,7 +764,7 @@ function Workspace({ user, onSignOut }: WorkspaceProps) {
     { id: "paper-scan", label: "Scan paper form", icon: "▧" },
     { id: "extension", label: "Browser extension", icon: "⌘" },
     { id: "privacy", label: "Privacy centre", icon: "◉" }
-  ];
+  ], []);
 
   return (
     <div className="workspace" onPointerMove={handleWorkspacePointerMove} onPointerLeave={resetDepthCard}>
