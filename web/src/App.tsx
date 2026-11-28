@@ -10,6 +10,7 @@ import type {
   UserDocument
 } from "./lib/types";
 import { renderPaperFormImage } from "./lib/paper-form-render";
+import FormSaathiScene from "./components/FormSaathiScene";
 
 type Page = "overview" | "documents" | "profile" | "applications" | "paper-scan" | "extension" | "privacy";
 type AuthMode = "signin" | "signup";
@@ -191,18 +192,26 @@ function AuthScreen() {
   return (
     <main className="auth-screen">
       <section className="auth-story">
+        <div className="auth-scene-layer">
+          <FormSaathiScene label="A three-dimensional stack of application forms, a personal information card and a verification seal. Drag to rotate." />
+          <div className="auth-scene-meta" aria-hidden="true">
+            <span>FORM FLOW / 001</span>
+            <strong>From documents<br />to done.</strong>
+            <small>ORGANISE · REVIEW · COMPLETE</small>
+          </div>
+        </div>
         <div className="brand-lockup"><div className="brand-mark">F</div><span>FormSaathi</span></div>
         <div className="story-copy">
-          <p className="eyebrow light">Less paperwork, more clarity</p>
-          <h1>Government forms shouldn't feel like a maze.</h1>
-          <p>Keep your documents organised, understand what a form needs and stay in control of every field you fill.</p>
+          <p className="eyebrow light">Your documents. Your forms. One clear flow.</p>
+          <h1>Paperwork, without the maze.</h1>
+          <p>Keep documents organised, review extracted details and complete supported forms with control. FormSaathi helps with the busywork, while every important decision stays yours.</p>
           <div className="story-points">
             <div><span className="point-check">✓</span><span>Your documents stay under your account.</span></div>
             <div><span className="point-check">✓</span><span>Review extracted details before saving.</span></div>
-            <div><span className="point-check">✓</span><span>You decide what gets autofilled.</span></div>
+            <div><span className="point-check">✓</span><span>You approve what gets autofilled.</span></div>
           </div>
         </div>
-        <div className="story-footer">A clearer way to complete applications.</div>
+        <div className="story-footer">A calmer way to organise documents and complete applications.</div>
       </section>
       <section className="auth-panel">
         <div className="auth-card">
