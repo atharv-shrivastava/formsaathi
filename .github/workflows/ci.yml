@@ -1,4 +1,4 @@
-name: FormSaathi CI
+name: Saral Form CI
 
 on:
   push:
@@ -55,7 +55,7 @@ jobs:
       - name: Upload web build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: formsaathi-web-dist
+          name: saral-form-web-dist
           path: web/dist/
           if-no-files-found: error
           retention-days: 3
@@ -75,12 +75,12 @@ jobs:
       - name: Stage extension package
         run: |
           mkdir -p release
-          cp extension/.output/*.zip release/FormSaathi-Chrome-Extension.zip
+          cp extension/.output/*.zip release/Saral-Form-Chrome-Extension.zip
 
       - name: Upload extension package
         uses: actions/upload-artifact@v4
         with:
-          name: formsaathi-chrome-extension
+          name: saral-form-chrome-extension
           path: release/FormSaathi-Chrome-Extension.zip
           if-no-files-found: error
           retention-days: 14
