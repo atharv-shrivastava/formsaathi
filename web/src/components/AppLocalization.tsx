@@ -11,7 +11,7 @@ const hindiTranslations: Record<string, string> = {
   "Review extracted information before it is saved as verified.": "निकाली गई जानकारी को सत्यापित करके सहेजने से पहले जाँचें।",
   "Applications": "आवेदन",
   "Keep track of the forms you are working on.": "जिन फ़ॉर्म पर आप काम कर रहे हैं, उनकी प्रगति देखें।",
-  "Scan paper form": "कागज़ी फ़ॉर्म स्कैन करें",
+  "Scan paper form": "फ़ॉर्म स्कैन करें",
   "Scan a paper form": "कागज़ी फ़ॉर्म स्कैन करें",
   "Use your phone camera or gallery to create a filled copy of a paper form.": "फ़ॉर्म की भरी हुई कॉपी बनाने के लिए फ़ोन कैमरा या गैलरी का उपयोग करें।",
   "Browser extension": "ब्राउज़र एक्सटेंशन",
@@ -58,7 +58,7 @@ const hindiTranslations: Record<string, string> = {
   "Review extracted details before saving.": "जानकारी सहेजने से पहले उसे जाँचें।",
   "You approve what gets autofilled.": "ऑटोफ़िल होने वाली जानकारी को आप मंज़ूरी देते हैं।",
   "A calmer way to organise documents and complete applications.": "दस्तावेज़ व्यवस्थित करने और आवेदन पूरे करने का एक आसान तरीका।",
-  "Create an account": "अकाउंट बनाएँ",
+  "Create an account": "नया अकाउंट बनाएँ",
   "Welcome back": "वापसी पर स्वागत है",
   "Create your account": "अपना अकाउंट बनाएँ",
   "Sign in to Saral Form": "Saral Form में साइन इन करें",
@@ -119,7 +119,7 @@ const hindiTranslations: Record<string, string> = {
   "View profile": "प्रोफ़ाइल देखें",
   "waiting for review": "समीक्षा की प्रतीक्षा में",
   "Check each extracted value before adding it to your profile.": "प्रोफ़ाइल में जोड़ने से पहले निकाली गई हर जानकारी जाँचें।",
-  "Review details": "जानकारी जाँचें",
+  "Review details": "विवरण जाँचें",
   "Add your first document": "अपना पहला दस्तावेज़ जोड़ें",
   "Start with a PDF or a clear photo of a document you use often.": "PDF या अक्सर उपयोग किए जाने वाले दस्तावेज़ की साफ़ फ़ोटो से शुरू करें।",
   "Open document vault": "दस्तावेज़ संग्रह खोलें",
@@ -266,7 +266,7 @@ const hindiTranslations: Record<string, string> = {
   "Paper form filling steps": "कागज़ी फ़ॉर्म भरने के चरण",
   "Add photo": "फ़ोटो जोड़ें",
   "Analyse": "विश्लेषण करें",
-  "Review values": "जानकारी जाँचें",
+  "Review values": "मान जाँचें",
   "Final check": "अंतिम जाँच",
   "Download": "डाउनलोड करें",
   "Step 1 · Add your form": "चरण 1 · अपना फ़ॉर्म जोड़ें",
@@ -372,21 +372,36 @@ const ignoredSelector = "script,style,noscript,code,pre,[data-no-translate]";
 const translatableAttributes = ["placeholder", "title", "aria-label", "aria-description", "alt"];
 
 function localizePhrase(value: string, locale: Locale): string {
-  const trimmed = value.trim().replace(/\\s+/g, " ");
+  const trimmed = value.trim().replace(/\s+/g, " ");
   if (!trimmed) return value;
 
   const source = locale === "hi" ? (reverseHindi.get(trimmed) || trimmed) : (reverseHindi.get(trimmed) || trimmed);
   let translated = locale === "hi" ? (hindiTranslations[source] || source) : source;
 
   if (locale === "hi" && translated === source) {
-    const uploaded = source.match(/^(.+) uploaded\\. Saral Form will now ask permission to extract its labelled fields\\.$/);
+    const uploaded = source.match(/^(.+) uploaded\. Saral Form will now ask permission to extract its labelled fields\.$/);
     if (uploaded) translated = uploaded[1] + " अपलोड हो गया। Saral Form अब इसके फ़ील्ड निकालने की अनुमति माँगेगा।";
-    const greeting = source.match(/^Good to see you, (.+)\\.$/);
+    const greeting = source.match(/^Good to see you, (.+)\.$/);
     if (greeting) translated = "आपसे मिलकर अच्छा लगा, " + greeting[1] + "।";
-    const waiting = source.match(/^(\\d+) details waiting for review$/);
+    const waiting = source.match(/^(\d+) details waiting for review$/);
     if (waiting) translated = waiting[1] + " विवरण समीक्षा की प्रतीक्षा में";
-    const count = source.match(/^(\\d+) documents stored$/);
+    const count = source.match(/^(\d+) documents stored$/);
     if (count) translated = count[1] + " दस्तावेज़ सहेजे गए";
+    const scanError = source.match(/^OCR service returned HTTP (.+)\. Check the backend route and Render logs\.$/);
+    if (scanError) translated = "OCR सेवा ने HTTP " + scanError[1] + " लौटाया। बैकएंड रूट और Render लॉग जाँचें।";
+    const detected = source.match(/^(AI|OCR) detected (\d+) new field\(s\) in this document\. Select the values you want to save to your profile\.$/);
+    if (detected) translated = (detected[1] === "AI" ? "AI ने" : "OCR ने") + " इस दस्तावेज़ में " + detected[2] + " नए फ़ील्ड पहचाने। प्रोफ़ाइल में सहेजने वाले मान चुनें।";
+  }
+
+  if (locale === "en") {
+    const uploaded = value.trim().match(/^(.+) अपलोड हो गया। Saral Form अब इसके फ़ील्ड निकालने की अनुमति माँगेगा।$/);
+    if (uploaded) translated = uploaded[1] + " uploaded. Saral Form will now ask permission to extract its labelled fields.";
+    const greeting = value.trim().match(/^आपसे मिलकर अच्छा लगा, (.+)।$/);
+    if (greeting) translated = "Good to see you, " + greeting[1] + ".";
+    const waiting = value.trim().match(/^(\d+) विवरण समीक्षा की प्रतीक्षा में$/);
+    if (waiting) translated = waiting[1] + " details waiting for review";
+    const count = value.trim().match(/^(\d+) दस्तावेज़ सहेजे गए$/);
+    if (count) translated = count[1] + " documents stored";
   }
   return value.replace(value.trim(), translated);
 }
