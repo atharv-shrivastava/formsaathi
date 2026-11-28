@@ -340,14 +340,43 @@ function createUserScopedClient(accessToken) {
 
 async function loadVerifiedProfileFacts(accessToken) {
   const userClient = createUserScopedClient(accessToken);
-  const { data, error } = await userClient
-    .from("profile_facts")
-    .select("id,fact_key,fact_label,fact_value,source_document_id,confidence,updated_at")
-    .eq("verified", true)
-    .order("updated_at", { ascending: false })
-    .limit(500);
-  if (error) throw new Error("Could not retrieve your approved Saral Form profile values.");
-  return data || [];
+  const pageSize = 1000;
+  const maximumFacts = 5000;
+  const facts = [];
+
+  for (let offset = 0; offset < maximumFacts; offset += pageSize) {
+    const { data, error } = await userClient
+      .from("profile_facts")
+      .select("id,fact_key,fact_label,fact_value,source_document_id,confidence,updated_at")
+      .eq("verified", true)
+      .order("updated_at", { ascending: false })
+      .range(offset, offset + pageSize - 1);
+    if (error) throw new Error("Could not retrieve your approved Saral Form profile values.");
+    facts.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+
+  const sourceDocumentIds = Array.from(new Set(
+    facts.map((fact) => fact.source_document_id).filter(Boolean)
+  ));
+  const sourceDocuments = new Map();
+  const documentPageSize = 500;
+  for (let offset = 0; offset < sourceDocumentIds.length; offset += documentPageSize) {
+    const pageIds = sourceDocumentIds.slice(offset, offset + documentPageSize);
+    const { data, error } = await userClient
+      .from("documents")
+      .select("id,filename")
+      .in("id", pageIds);
+    if (error) throw new Error("Could not retrieve source document names for approved profile values.");
+    for (const document of data || []) sourceDocuments.set(document.id, document.filename);
+  }
+
+  return facts.map((fact) => ({
+    ...fact,
+    sourceName: fact.source_document_id
+      ? sourceDocuments.get(fact.source_document_id) || "Approved document-derived profile value"
+      : "General information"
+  }));
 }
 
 async function loadApprovedDocumentFacts(accessToken) {
@@ -393,6 +422,40 @@ async function loadApprovedDocumentFacts(accessToken) {
     };
   });
 }
+
+async function loadPendingDocumentFactCount(accessToken) {
+  const userClient = createUserScopedClient(accessToken);
+  const { count, error } = await userClient
+    .from("extracted_facts")
+    .select("id", { count: "exact", head: true })
+    .eq("review_status", "pending");
+  if (error) throw new Error("Could not retrieve the document review status.");
+  return count || 0;
+}
+
+app.get("/api/profile/autofill-facts", async (request, response) => {
+  if (!request.formSaathiAccessToken || !supabaseUrl || !supabasePublishableKey) {
+    return response.status(401).json({ error: "Sign in to Saral Form to retrieve approved autofill values." });
+  }
+
+  try {
+    const [generalFacts, documentFacts, pendingDocumentFactCount] = await Promise.all([
+      loadVerifiedProfileFacts(request.formSaathiAccessToken),
+      loadApprovedDocumentFacts(request.formSaathiAccessToken),
+      loadPendingDocumentFactCount(request.formSaathiAccessToken)
+    ]);
+
+    response.json({
+      generalFacts: generalFacts.map((fact) => ({ ...fact, sourceType: "general" })),
+      documentFacts: documentFacts.map((fact) => ({ ...fact, sourceType: "document" })),
+      pendingDocumentFactCount
+    });
+  } catch (error) {
+    response.status(502).json({
+      error: error instanceof Error ? error.message : "Could not retrieve approved Saral Form autofill values."
+    });
+  }
+});
 
 function getGeminiModel() {
   return process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
