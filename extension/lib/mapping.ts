@@ -72,7 +72,7 @@ export function canonicalFactKey(value: string): string | null {
   const exact = aliasLookup.get(normalized);
   // A bare "Percentage" label does not say whether this is attendance,
   // academic marks or another ratio. Require a contextual education label.
-  if (exact === "percentage") return null;
+  if (exact === "percentage" && normalized === "percentage") return null;
   if (exact) return exact;
 
   // Prefer the longest complete alias phrase, not arbitrary substring matches.
