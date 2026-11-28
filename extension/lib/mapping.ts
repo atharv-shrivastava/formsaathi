@@ -85,11 +85,11 @@ export function canonicalFactKey(value: string): string | null {
       }
 
       // IFSC/MICR is a combined identifier field, not a safe IFSC-only target.
-      if (key === "ifsc_code" && /\\bmicr\\b/.test(normalized)) return false;
+      if (key === "ifsc_code" && /\bmicr\b/.test(normalized)) return false;
 
       // Avoid mapping other/additional income-source fields to family annual income.
       if (key === "annual_income" &&
-          /\\b(other|additional|alternate|secondary|source)\\b/.test(normalized)) {
+          /\b(other|additional|alternate|secondary|source)\b/.test(normalized)) {
         return false;
       }
 
